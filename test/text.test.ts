@@ -49,6 +49,24 @@ test("afterNext names the started agent and the plan stop", () => {
   expect(text).toContain("stop for plan approval");
 });
 
+test("afterNext with no agent names the branch to start by hand", () => {
+  const text = afterNext(result, null);
+  expect(text.startsWith("TH-667 Procedure reads is next; the successor is not started yet.")).toBe(true);
+  expect(text).toContain("feat/TH-667-procedure-reads");
+  expect(text).toContain("`/epic start TH-667`");
+});
+
+test("afterNext pending tells the agent to wait for the successor's name", () => {
+  const text = afterNext(result, "pending");
+  expect(text).toBe(
+    "TH-667 Procedure reads is next. The plugin is starting the successor now; " +
+      "wait for its name, then this session is finished.",
+  );
+  const noGh = afterNext({ ...result, closed: { ...result.closed, pr: null } }, "pending");
+  expect(noGh).toContain("`gh` was not available");
+  expect(noGh).not.toContain("/epic start");
+});
+
 test("nextPrompt carries the start line, the PR answers and the extra line", () => {
   const text = nextPrompt(result, "extra");
   expect(text.startsWith("/epic start TH-667")).toBe(true);

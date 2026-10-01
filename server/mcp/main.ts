@@ -104,7 +104,7 @@ server.registerTool(
   ({ story: id }) =>
     answer(async () => {
       const result = await cmdNext(root, loadConfig(root), id, {});
-      const lines = [afterNext(result, null)];
+      const lines = [afterNext(result, "pending")];
       if (result.next !== null) {
         lines.push(`Spawn pending for ${result.next.story}: the plugin starts the successor now.`);
       }

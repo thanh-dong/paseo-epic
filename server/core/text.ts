@@ -43,8 +43,12 @@ export function afterClose(prUrl: string | null, manual: string[]): string {
   return `${opened} Tell the user to merge it, then reply \`next\`. ${wait}`;
 }
 
-/** After `next`: the epic closed, the agent started, or what to start by hand. */
-export function afterNext(result: NextResult, spawned: { title: string } | null): string {
+/**
+ * After `next`: the epic closed, the agent started, the spawn the plugin is
+ * about to perform (`"pending"`, said by the `epic_next` tool), or what to
+ * start by hand (`null`).
+ */
+export function afterNext(result: NextResult, spawned: { title: string } | null | "pending"): string {
   const noGh = result.closed.pr === null ? NO_GH : "";
   const next = result.next;
   if (next === null) {
@@ -53,6 +57,13 @@ export function afterNext(result: NextResult, spawned: { title: string } | null)
       `What remains is the draft epic PR from ${result.epicBranch} into the base branch; review and merge it.`,
       noGh,
       "This session is finished.",
+    ]);
+  }
+  if (spawned === "pending") {
+    return paragraph([
+      `${next.story} ${next.title} is next.`,
+      "The plugin is starting the successor now; wait for its name, then this session is finished.",
+      noGh,
     ]);
   }
   if (spawned !== null) {
@@ -64,7 +75,7 @@ export function afterNext(result: NextResult, spawned: { title: string } | null)
     ]);
   }
   return paragraph([
-    `${next.story} ${next.title} is next; no agent was started for it.`,
+    `${next.story} ${next.title} is next; the successor is not started yet.`,
     `Create a worktree on a new branch ${next.branch} from ${next.baseRef}, then start an agent there with \`/epic start ${next.story}\`.`,
     noGh,
   ]);

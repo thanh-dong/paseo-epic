@@ -1,3 +1,4 @@
+import type { PaseoApi } from "@getpaseo/client";
 import type { PluginServerContext } from "@getpaseo/plugin/server";
 import {
   checkRpc,
@@ -8,11 +9,12 @@ import {
   startRpc,
   statusRpc,
 } from "../../shared/contracts";
-import { cmdCheck, cmdClose, cmdInit, cmdNext, cmdStart, cmdStatus, statusDir } from "../core/commands";
-import { type EpicConfig, loadConfig } from "../core/config";
-import { isEpicRepo, loadLocal } from "../core/locate";
-import { afterNext } from "../core/text";
+import { cmdCheck, cmdClose, cmdInit, cmdNext, cmdStart, cmdStatus } from "../core/commands";
+import { loadConfig } from "../core/config";
+import { localBranchExists } from "../core/git";
+import { isEpicRepo } from "../core/locate";
 import { EpicError, type SpawnNext } from "../core/types";
+import { createSpawnNext } from "./next";
 
 /** Run `fn`; a refusal becomes a plain Error with the same text, so the client shows it inline. */
 async function refusalsAsErrors<T>(fn: () => T | Promise<T>): Promise<T> {
@@ -24,26 +26,37 @@ async function refusalsAsErrors<T>(fn: () => T | Promise<T>): Promise<T> {
   }
 }
 
-/**
- * The story `next` runs for when none is given: the last ledger entry of the
- * package `status` shows without a ref.
- */
-export async function lastClosedStory(root: string, config: EpicConfig): Promise<string> {
-  const { epic } = loadLocal(await statusDir(root, config));
-  const last = epic.ledger.at(-1);
-  if (!last) throw new EpicError(`${epic.id} has no closed story yet; close one before running next`);
-  return last.id;
+/** The workspace whose checkout is on `branch`, read page by page from the daemon. */
+export async function findWorkspaceByBranch(
+  paseo: PaseoApi,
+  branch: string,
+): Promise<{ id: string; directory: string } | null> {
+  let cursor: string | undefined;
+  for (;;) {
+    const page = await paseo.workspaces.list({ page: { limit: 200, ...(cursor ? { cursor } : {}) } });
+    const hit = page.entries.find((w) => w.gitRuntime?.currentBranch === branch);
+    if (hit) return { id: hit.id, directory: hit.workspaceDirectory ?? "" };
+    if (!page.pageInfo?.hasMore || !page.pageInfo.nextCursor) return null;
+    cursor = page.pageInfo.nextCursor;
+  }
 }
 
-/** Placeholder until the SDK spawn lands: runs `next` and starts no agent. */
-export const spawnNext: SpawnNext = async ({ root, story }) => {
-  const config = loadConfig(root);
-  const result = await cmdNext(root, config, story ?? (await lastClosedStory(root, config)));
-  return { ...result, spawned: null, message: afterNext(result, null) };
-};
+/** The `next` spawn on the daemon SDK of one handler or hook call. */
+export function spawnNextFor(paseo: PaseoApi): SpawnNext {
+  return createSpawnNext({
+    paseo,
+    config: loadConfig,
+    next: cmdNext,
+    findWorkspaceByBranch: (branch) => findWorkspaceByBranch(paseo, branch),
+    localBranchExists,
+  });
+}
 
 /** Wire every RPC contract to the core, with `workspaceDir` as the repo root. */
-export function registerHandlers(server: PluginServerContext, deps: { spawnNext: SpawnNext }): void {
+export function registerHandlers(
+  server: PluginServerContext,
+  deps: { spawnNextFor: (paseo: PaseoApi) => SpawnNext },
+): void {
   server.handle(statusRpc, ({ workspaceDir, ref }) =>
     refusalsAsErrors(() => cmdStatus(workspaceDir, loadConfig(workspaceDir), ref)),
   );
@@ -59,8 +72,8 @@ export function registerHandlers(server: PluginServerContext, deps: { spawnNext:
   server.handle(closeRpc, ({ workspaceDir, story }) =>
     refusalsAsErrors(() => cmdClose(workspaceDir, loadConfig(workspaceDir), story)),
   );
-  server.handle(nextRpc, ({ workspaceDir, story }) =>
-    refusalsAsErrors(() => deps.spawnNext({ root: workspaceDir, story })),
+  server.handle(nextRpc, ({ workspaceDir, story }, { paseo }) =>
+    refusalsAsErrors(() => deps.spawnNextFor(paseo)({ root: workspaceDir, story })),
   );
   server.handle(isEpicRpc, ({ workspaceDir }) =>
     refusalsAsErrors(() => ({ epic: isEpicRepo(workspaceDir, loadConfig(workspaceDir)) })),

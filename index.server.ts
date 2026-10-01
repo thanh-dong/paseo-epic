@@ -4,7 +4,8 @@ import type { PluginServerContext } from "@getpaseo/plugin/server";
 import { loadConfig } from "./server/core/config";
 import { isEpicRepo } from "./server/core/locate";
 import { injectEpicMcp } from "./server/hooks/inject-mcp";
-import { registerHandlers, spawnNext } from "./server/rpc/handlers";
+import { registerSpawnOnNext } from "./server/hooks/spawn-on-next";
+import { registerHandlers, spawnNextFor } from "./server/rpc/handlers";
 
 /** The git top level of `cwd`, or `cwd` itself when git cannot tell. */
 function repoRoot(cwd: string): string {
@@ -59,8 +60,10 @@ export default function contribute(server: PluginServerContext) {
       repoRoot,
     }),
   );
-  registerHandlers(server, { spawnNext });
+  const removeSpawnHook = registerSpawnOnNext(server, { spawnNextFor, repoRoot });
+  registerHandlers(server, { spawnNextFor });
   return () => {
     removeHook();
+    removeSpawnHook();
   };
 }

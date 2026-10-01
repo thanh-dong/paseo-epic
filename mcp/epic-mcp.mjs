@@ -44674,6 +44674,13 @@ function afterNext(result, spawned) {
       "This session is finished."
     ]);
   }
+  if (spawned === "pending") {
+    return paragraph([
+      `${next.story} ${next.title} is next.`,
+      "The plugin is starting the successor now; wait for its name, then this session is finished.",
+      noGh
+    ]);
+  }
   if (spawned !== null) {
     return paragraph([
       `Started agent "${spawned.title}" in worktree ${next.branch}.`,
@@ -44683,7 +44690,7 @@ function afterNext(result, spawned) {
     ]);
   }
   return paragraph([
-    `${next.story} ${next.title} is next; no agent was started for it.`,
+    `${next.story} ${next.title} is next; the successor is not started yet.`,
     `Create a worktree on a new branch ${next.branch} from ${next.baseRef}, then start an agent there with \`/epic start ${next.story}\`.`,
     noGh
   ]);
@@ -44765,7 +44772,7 @@ server.registerTool(
   },
   ({ story: id }) => answer(async () => {
     const result = await cmdNext(root, loadConfig(root), id, {});
-    const lines = [afterNext(result, null)];
+    const lines = [afterNext(result, "pending")];
     if (result.next !== null) {
       lines.push(`Spawn pending for ${result.next.story}: the plugin starts the successor now.`);
     }

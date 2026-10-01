@@ -15,29 +15,43 @@ type TextResult = { content: Array<{ text: string }>; isError?: boolean };
 
 test("mcp server lists tools and answers epic_check", async () => {
   const fx = new RemoteFixture();
-  await fx.setup();
-  await fx.planAndPush();
-  const client = new Client({ name: "t", version: "0" });
-  await client.connect(
-    new StdioClientTransport({ command: process.execPath, args: ["mcp/epic-mcp.mjs", fx.root], cwd: repoRoot }),
-  );
   try {
-    const tools = (await client.listTools()).tools.map((t) => t.name).sort();
-    expect(tools).toEqual(["epic_check", "epic_close", "epic_close_check", "epic_next", "epic_start", "epic_status"]);
+    await fx.setup();
+    await fx.planAndPush();
+    const client = new Client({ name: "t", version: "0" });
+    await client.connect(
+      new StdioClientTransport({ command: process.execPath, args: ["mcp/epic-mcp.mjs", fx.root], cwd: repoRoot }),
+    );
+    try {
+      const tools = (await client.listTools()).tools.map((t) => t.name).sort();
+      expect(tools).toEqual(["epic_check", "epic_close", "epic_close_check", "epic_next", "epic_start", "epic_status"]);
 
-    const check = (await client.callTool({ name: "epic_check", arguments: { epic: "E99" } })) as TextResult;
-    expect(check.content[0].text).toContain("ok");
-    expect(check.content[0].text.endsWith("\n\nok")).toBe(true);
+      const check = (await client.callTool({ name: "epic_check", arguments: { epic: "E99" } })) as TextResult;
+      expect(check.content[0].text).toContain("ok");
+      expect(check.content[0].text.endsWith("\n\nok")).toBe(true);
 
-    const status = (await client.callTool({ name: "epic_status", arguments: {} })) as TextResult;
-    expect(status.isError).toBeFalsy();
-    expect(JSON.parse(status.content[0].text.split("\n\n")[0]).epic).toBe("E99");
+      const status = (await client.callTool({ name: "epic_status", arguments: {} })) as TextResult;
+      expect(status.isError).toBeFalsy();
+      expect(JSON.parse(status.content[0].text.split("\n\n")[0]).epic).toBe("E99");
 
-    const refused = (await client.callTool({ name: "epic_start", arguments: { story: "TH-902" } })) as TextResult;
-    expect(refused.isError).toBe(true);
-    expect(refused.content[0].text).toContain("written for TH-901, not TH-902");
+      const refused = (await client.callTool({ name: "epic_start", arguments: { story: "TH-902" } })) as TextResult;
+      expect(refused.isError).toBe(true);
+      expect(refused.content[0].text).toContain("written for TH-901, not TH-902");
+
+      const closeCheck = (await client.callTool({
+        name: "epic_close_check",
+        arguments: { story: "TH-901" },
+      })) as TextResult;
+      expect(closeCheck.isError).toBeFalsy();
+      const [json, next] = closeCheck.content[0].text.split("\n\n");
+      const parsed = JSON.parse(json);
+      expect(Object.keys(parsed)).toEqual(["problems"]);
+      expect(parsed.problems).toContain("EPIC.md: TH-901 row is `planned`, expected `implemented`");
+      expect(next).toContain("call epic_close_check again");
+    } finally {
+      await client.close();
+    }
   } finally {
-    await client.close();
     fx.teardown();
   }
 });
