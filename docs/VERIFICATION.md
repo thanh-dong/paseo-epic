@@ -49,9 +49,8 @@ From spec section 13. Do this only after every row above passes.
 
 1. Install the plugin on the daemon; enable plugins once, with permission.
 2. Add `.epic.yml` to inflow: the intake gate, the ADR rule, and the plan
-   rule as hook text; `profile: story`. Note: the ADR rule belongs to close,
-   and `hooks.close` is not quoted yet (see Limitations in
-   [README.md](README.md)).
+   rule as hook text; `profile: story`. The ADR rule belongs to close:
+   put it under `hooks.close`, which `epic_close_check` quotes.
 3. Delete `.claude/skills/epic/`, `scripts/epic.py`, and
    `scripts/tests/test_epic.py` from inflow. Keep `docs/templates/epic.md`
    and `handoff.md` as overrides.

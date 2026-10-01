@@ -25,7 +25,7 @@ error. So is a wrong type or a YAML syntax error. With a bad file:
 | `baseBranch` | string | `main` | The branch `init` cuts the epic branch from (`origin/<baseBranch>`), and the base of the draft epic PR. The panel shows how many commits the epic branch is behind it. |
 | `profile` | string | none | The Paseo launch profile for successor agents, matched by profile id or name. Without it, the first profile whose notes mention "story" or "epic"; without that, a plain `claude` agent. |
 | `hooks.start` | list of strings | `[]` | Lines added to the "what to do now" text after `epic_start`. |
-| `hooks.close` | list of strings | `[]` | Lines meant for the agent before close. Not quoted yet (see Limitations in [README.md](README.md)). |
+| `hooks.close` | list of strings | `[]` | Lines for the agent before close. `epic_close_check` quotes them after its "what to do now" paragraph, one per line, whether the package is ready or not. |
 | `hooks.nextPrompt` | string | none | Text appended to the successor agent's first prompt, after the PR comments. |
 
 ## Full example
@@ -39,7 +39,7 @@ profile: story                      # Paseo launch profile for successor agents
 hooks:
   start:                            # lines quoted to the agent after start
     - "Run scripts/bin/harness-cli query matrix before any edit."
-  close:                            # lines for the agent before close (not quoted yet)
+  close:                            # lines quoted by epic_close_check
     - "Accept ADRs scoped inside the story."
   nextPrompt: |                     # appended to the successor agent's prompt
     Write the plan and stop for approval before the intake gate.

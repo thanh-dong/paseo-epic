@@ -44760,8 +44760,9 @@ server.registerTool(
     inputSchema: story
   },
   ({ story: id }) => answer(async () => {
-    const problems = await closeProblems(root, loadConfig(root), id);
-    return { result: { problems }, next: afterCloseCheck(problems) };
+    const config2 = loadConfig(root);
+    const problems = await closeProblems(root, config2, id);
+    return { result: { problems }, next: [afterCloseCheck(problems), ...config2.hooks.close].join("\n") };
   })
 );
 server.registerTool(

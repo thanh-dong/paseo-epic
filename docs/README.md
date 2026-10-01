@@ -221,9 +221,10 @@ do next.
 
 ## Limitations
 
-- `.epic.yml` `hooks.close` lines are not quoted to the agent yet. This is
-  planned for the next release. `hooks.start` and `hooks.nextPrompt` are
-  quoted today.
+- `.epic.yml` `hooks.close` lines are quoted by `epic_close_check`, after
+  its "what to do now" paragraph, one per line. The `/epic close` prompt
+  itself does not carry them. `hooks.start` is quoted by `epic_start`, and
+  `hooks.nextPrompt` ends the successor agent's first prompt.
 - Without the `gh` CLI, the plugin does not open PRs or read PR comments.
   `epic_close` returns the commands to run by hand, and `next` says the PR
   comments were not read.

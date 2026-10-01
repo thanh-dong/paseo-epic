@@ -73,8 +73,9 @@ The plugin adds no method.
 Close story <story>. Update the epic package by hand: set the <story> row to `implemented` with Done `YYYY-MM-DD PR #n` (`PR pending` while the number is not known); append the ledger entry `### <story> — YYYY-MM-DD` with five bullets: Branch / PR, Shipped, Decisions, Deviations, Effects on later stories; rewrite HANDOFF.md whole with headings 1 to 5 and the header `after=<story>`. Then call epic_close_check with <story> until it reports ready, and call epic_close with <story>.
 ```
 
-The `.epic.yml` `hooks.close` lines are not added to this prompt yet; see
-Limitations in [README.md](README.md).
+The `.epic.yml` `hooks.close` lines are not part of this prompt.
+`epic_close_check` quotes them, one per line, after its "what to do now"
+paragraph, both when it lists problems and when the package is ready.
 
 The agent writes these by hand with its normal file tools:
 
@@ -104,12 +105,14 @@ When problems remain:
 
 ```
 Fix these, then call epic_close_check again. The ledger entry has five bullets: Branch / PR, Shipped, Decisions, Deviations, Effects on later stories. HANDOFF.md is rewritten whole with headings 1 to 5.
+<hooks.close lines, one per line>
 ```
 
 When it is ready:
 
 ```
 The package is ready to close. Call epic_close now.
+<hooks.close lines, one per line>
 ```
 
 `epic_close` must run on the story branch. It renders the Status block,

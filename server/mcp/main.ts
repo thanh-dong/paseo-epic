@@ -77,8 +77,10 @@ server.registerTool(
   },
   ({ story: id }) =>
     answer(async () => {
-      const problems = await closeProblems(root, loadConfig(root), id);
-      return { result: { problems }, next: afterCloseCheck(problems) };
+      const config = loadConfig(root);
+      const problems = await closeProblems(root, config, id);
+      // The `.epic.yml` close hooks follow the paragraph, one per line, ready or not.
+      return { result: { problems }, next: [afterCloseCheck(problems), ...config.hooks.close].join("\n") };
     }),
 );
 

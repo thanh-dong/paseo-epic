@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, symlinkSync } from "node:fs";
+import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -92,6 +92,38 @@ test("epic_next prints the pending line first, then the JSON and what to do", as
       const [json, next] = rest.join("\n").split("\n\n");
       expect(JSON.parse(json).next.story).toBe("TH-902");
       expect(next).toContain("The plugin is starting the successor now");
+    } finally {
+      await client.close();
+    }
+  } finally {
+    fx.teardown();
+  }
+});
+
+test("epic_close_check quotes the .epic.yml close hooks, with problems and when ready", async () => {
+  const fx = new RemoteFixture();
+  try {
+    await fx.setup();
+    const dir = await fx.planAndPush();
+    const hook = "Accept ADRs scoped inside the story.";
+    writeFileSync(join(fx.root, ".epic.yml"), `hooks:\n  close:\n    - "${hook}"\n`);
+    const client = new Client({ name: "t", version: "0" });
+    await client.connect(
+      new StdioClientTransport({ command: process.execPath, args: ["mcp/epic-mcp.mjs", fx.root], cwd: repoRoot }),
+    );
+    try {
+      const check = async () => {
+        const out = (await client.callTool({ name: "epic_close_check", arguments: { story: "TH-901" } })) as TextResult;
+        expect(out.isError).toBeFalsy();
+        return out.content[0].text.split("\n\n").slice(1).join("\n\n").split("\n");
+      };
+      const withProblems = await check();
+      expect(withProblems[0]).toContain("call epic_close_check again");
+      expect(withProblems.at(-1)).toBe(hook);
+
+      fx.mark901Done(dir);
+      const ready = await check();
+      expect(ready).toEqual(["The package is ready to close. Call epic_close now.", hook]);
     } finally {
       await client.close();
     }
