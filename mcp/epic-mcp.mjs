@@ -44377,7 +44377,6 @@ function prBody(epic, story2, dir, nextStory) {
   } else {
     parts.push("## Epic", "", `This was the last story; ${epic.id} is closed.`, "");
   }
-  parts.push("\u{1F916} Generated with [Claude Code](https://claude.com/claude-code)");
   return parts.join("\n");
 }
 async function closeProblems(root2, config2, story2) {
@@ -44402,7 +44401,7 @@ async function closeProblems(root2, config2, story2) {
 async function cmdClose(root2, config2, story2, opts = {}) {
   requireStoryId(story2);
   const branch = await currentBranch(root2);
-  if (!branch.includes(story2)) {
+  if (!branch.startsWith(`${config2.branchPrefix}${story2}-`)) {
     throw new EpicError(
       `current branch \`${branch}\` is not the story branch for ${story2}; check out \`${config2.branchPrefix}${story2}-\u2026\` and run close again`
     );

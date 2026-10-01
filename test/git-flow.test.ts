@@ -152,6 +152,8 @@ test("prBodyCarriesTheLedgerEntryAndTheHandoffSentence", async () => {
       'reply `next` to the closing agent, or press "Start next story" in the Epic panel.',
   );
   expect(prBody(epic, "TH-901", "x", "none")).toContain("## Epic\n\nThis was the last story; E99 is closed.");
+  expect(body).not.toContain("Generated with");
+  expect(body.endsWith("\n")).toBe(true);
 });
 
 test("closeRefusesUncommittedStoryWork", async () => {
@@ -170,6 +172,16 @@ test("closeRefusesWrongBranch", async () => {
   await expect(cmdClose(fx.root, cfg, "TH-901", { noPr: true, noGh: true })).rejects.toThrow(
     "not the story branch",
   );
+});
+
+test("closeRefusesABranchThatOnlyContainsTheStoryId", async () => {
+  await fx.planAndPush();
+  for (const branch of ["feat/TH-9010-other", "fix/TH-901-first-thing"]) {
+    await git(fx.root, "checkout", "-q", "-b", branch);
+    await expect(cmdClose(fx.root, cfg, "TH-901", { noPr: true, noGh: true })).rejects.toThrow(
+      "not the story branch",
+    );
+  }
 });
 
 test("nextRefusesUntilTheCloseIsOnTheEpicTip", async () => {
