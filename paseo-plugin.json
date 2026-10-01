@@ -1,0 +1,10 @@
+{
+  "id": "epic",
+  "requirements": {
+    "paseo": ">=0.10.2"
+  },
+  "build": [
+    ["npm", "ci"],
+    ["npm", "run", "build:mcp"]
+  ]
+}
