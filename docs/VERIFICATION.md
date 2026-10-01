@@ -42,6 +42,15 @@ through the table.
 | 9 | `/epic` in the composer | autocomplete offers the command | pending | |
 | 10 | New agent in the E100 workspace | it lists the `epic_*` tools, including `epic_status` and `epic_check` | pending | |
 | 11 | Ask that agent to call `epic_status` | it returns the E100 record and a "what to do now" line | pending | |
+| 12 | `paseo plugin logs epic` after install | no "Cannot find module 'zod'" (Paseo supplies `zod` to the bundle) | pending | |
+| 13 | Local-path install after `npm ci --omit=dev` in the clone | `paseo plugin ls` shows `epic` as `running` | pending | |
+| 14 | New agent, daemon with `node` on `PATH` | the `epic` MCP server starts with the `which node` path; its tools are listed | pending | |
+| 15 | New agent, daemon with no `node` on `PATH` (and no `PASEO_EPIC_NODE`) | the server starts through the daemon executable with `ELECTRON_RUN_AS_NODE=1`; its tools are listed | pending | |
+| 16 | Row 15, in the agent's MCP server process | the provider merged the MCP `env` (`ELECTRON_RUN_AS_NODE=1` is set) | pending | |
+| 17 | New Codex agent in the E100 workspace | it also lists the `epic_*` tools | pending | |
+| 18 | Branch-off for a successor | Paseo accepts `baseBranch: origin/epic/…` (a remote ref) and cuts the story branch from it | pending | |
+| 19 | Reply `next` to a closing agent after the story PR merged | the `agent.turn_ended` hook spawns the successor after `epic_next`, and the closing agent gets `Started agent ...` | pending | |
+| 20 | Reply `next` again, or press **Start next story**, right after row 19 | `gitRuntime.currentBranch` of the new workspace is already filled, so the plugin finds it and starts no second agent | pending | |
 
 ## After the checks pass: move inflow to the plugin
 
