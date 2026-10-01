@@ -1,12 +1,43 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { checkPackage, counts, epicBranch, expectedNext, renderStatus, rowOf } from "./check";
+import {
+  checkPackage,
+  counts,
+  epicBranch,
+  expectedNext,
+  expectedState,
+  renderStatus,
+  rowOf,
+} from "./check";
 import type { EpicConfig } from "./config";
-import { ghAvailable, ghOpenPrs, gitDirty, localBranchExists, remoteBranchExists, run, runRaw } from "./git";
-import { epicsDir, findEpicDir, hasMarkers, loadFromRef, loadLocal, packetSlug, subdirs } from "./locate";
+import {
+  currentBranch,
+  ghAvailable,
+  ghMergedPrs,
+  ghOpenPrs,
+  ghPrComments,
+  gitDirty,
+  localBranchExists,
+  type MergedPr,
+  type PrComment,
+  remoteBranchExists,
+  run,
+  runRaw,
+} from "./git";
+import {
+  epicsDir,
+  findEpicDir,
+  gitRel,
+  hasMarkers,
+  loadFromRef,
+  loadLocal,
+  packetSlug,
+  subdirs,
+} from "./locate";
+import { ledgerEntry, parseEpic, splitLines } from "./parse";
 import { slugify, today } from "./slug";
 import { templateText } from "./templates";
-import { EPIC_ID_RE, EpicError, type Row, STORY_ID_RE } from "./types";
+import { EPIC_ID_RE, type EpicPackage, EpicError, type Row, STORY_ID_RE } from "./types";
 
 const DIRTY = "working tree has uncommitted changes; commit or stash them first";
 
@@ -181,4 +212,334 @@ export async function cmdRender(root: string, config: EpicConfig, ref: string): 
   const changed = text !== epic.text;
   if (changed) writeFileSync(epic.path, text);
   return { changed };
+}
+
+export interface CloseResult {
+  committed: boolean;
+  /** The commit subject, or why nothing was committed. */
+  message: string;
+  pushed: boolean;
+  pr: { number: number; url: string } | null;
+  epicPr: { url: string } | null;
+  /** Commands a human must run because the plugin did not push or did not use gh. */
+  manual: string[];
+}
+
+export interface NextResult {
+  epic: string;
+  epicBranch: string;
+  closed: { story: string; pr: MergedPr | null; comments: PrComment[] };
+  next: { story: string; title: string; lane: string; branch: string; baseRef: string } | null;
+}
+
+export interface StatusResult {
+  epic: string;
+  title: string;
+  epicBranch: string;
+  state: string;
+  stories: string;
+  next: string;
+  behind: string | null;
+  rows: Row[];
+  openPr: { number: number; url: string; headRefName: string } | null;
+  problems: string[];
+}
+
+function requireStoryId(story: string): void {
+  if (!STORY_ID_RE.test(story)) throw new EpicError(`\`${story}\` is not a story id like TH-652`);
+}
+
+/** Quote an argument for a POSIX shell when it is not plainly safe. */
+function shellQuote(arg: string): string {
+  return /^[\w@%+=:,./-]+$/.test(arg) ? arg : `'${arg.replaceAll("'", "'\\''")}'`;
+}
+
+function shellLine(cmd: string[]): string {
+  return cmd.map(shellQuote).join(" ");
+}
+
+/**
+ * Write the PR body for `gh pr create --body-file` inside the git dir: untracked,
+ * kept for a human who runs the command later, and overwritten on the next close.
+ */
+async function writeBodyFile(root: string, story: string, text: string): Promise<string> {
+  const gitDir = (await run(["git", "rev-parse", "--absolute-git-dir"], root)).trim();
+  const f = join(gitDir, `epic-pr-body-${story}.md`);
+  writeFileSync(f, text);
+  return f;
+}
+
+/** The PR number at the end of a `.../pull/<n>` URL. */
+function prNumber(url: string): number {
+  return Number(/\/pull\/(\d+)/.exec(url)?.[1] ?? 0);
+}
+
+/** The body of the story PR: the ledger entry, then what happens after the merge. */
+export function prBody(epic: EpicPackage, story: string, dir: string, nextStory: string): string {
+  const entry = ledgerEntry(epic.text, story);
+  const branch = epicBranch(epic);
+  const parts = [
+    `Story ${story} into \`${branch}\` (epic ${epic.id} — ${epic.title}).`,
+    "",
+    "## Ledger entry",
+    "",
+    entry || "_(none)_",
+    "",
+  ];
+  if (nextStory !== "none") {
+    parts.push(
+      "## Handoff",
+      "",
+      `\`${dir}/HANDOFF.md\` is written for **${nextStory}**. After this PR merges, reply \`next\` to the ` +
+        'closing agent, or press "Start next story" in the Epic panel.',
+      "",
+    );
+  } else {
+    parts.push("## Epic", "", `This was the last story; ${epic.id} is closed.`, "");
+  }
+  parts.push("🤖 Generated with [Claude Code](https://claude.com/claude-code)");
+  return parts.join("\n");
+}
+
+/**
+ * What stops `story` from closing: `check` on the package with the Status block
+ * rendered in memory, plus the three close rules. Writes nothing.
+ */
+export async function closeProblems(root: string, config: EpicConfig, story: string): Promise<string[]> {
+  requireStoryId(story);
+  const loaded = loadLocal(findEpicDir(root, config, story));
+  const handoff = loaded.handoff;
+  // Without markers there is nothing to render; check reports them missing.
+  const epic =
+    loaded.epic.statusSpan === null ? loaded.epic : parseEpic(loaded.epic.path, renderStatus(loaded.epic));
+  const problems = checkPackage(epic, handoff);
+  const row = rowOf(epic, story);
+  if (row && row.status !== "implemented") {
+    problems.push(`EPIC.md: ${story} row is \`${row.status}\`, expected \`implemented\``);
+  }
+  const last = epic.ledger.at(-1);
+  if (last && last.id !== story) {
+    problems.push(`EPIC.md: last ledger entry is ${last.id}, expected ${story}`);
+  }
+  if (handoff?.found && handoff.after !== story) {
+    problems.push(`HANDOFF.md: after=${handoff.after}, expected ${story}`);
+  }
+  return problems;
+}
+
+/**
+ * Render and check the package, commit the epic folder on the story branch,
+ * push it, and open the story PR into the epic branch (plus a draft epic PR
+ * into the base branch once no open rows remain). Steps it skips are
+ * returned in `manual`.
+ */
+export async function cmdClose(
+  root: string,
+  config: EpicConfig,
+  story: string,
+  opts: { noPr?: boolean; noGh?: boolean } = {},
+): Promise<CloseResult> {
+  requireStoryId(story);
+  const branch = await currentBranch(root);
+  if (!branch.includes(story)) {
+    throw new EpicError(`current branch \`${branch}\` is not the story branch for ${story}`);
+  }
+  const d = findEpicDir(root, config, story);
+  const before = loadLocal(d).epic;
+  if (before.statusSpan !== null) {
+    const text = renderStatus(before);
+    if (text !== before.text) writeFileSync(before.path, text);
+  }
+  const problems = await closeProblems(root, config, story);
+  if (problems.length > 0) {
+    throw new EpicError(`the package is not ready to close:\n  - ${problems.join("\n  - ")}`);
+  }
+  const { epic } = loadLocal(d);
+  const target = epicBranch(epic);
+  const nextStory = expectedNext(epic);
+
+  const rel = gitRel(root, d);
+  const others = splitLines(await gitDirty(root)).filter((ln) => !ln.includes(rel));
+  if (others.length > 0) {
+    throw new EpicError(
+      `uncommitted changes outside the epic folder; commit the story work first:\n  ${others.join("\n  ")}`,
+    );
+  }
+  await run(["git", "add", "-A", rel], root);
+  const staged = (await run(["git", "diff", "--cached", "--name-only"], root)).trim();
+  let committed = false;
+  let message = "epic folder already committed";
+  if (staged) {
+    message = `docs(${epic.id}): close ${story}; handoff for ${nextStory}`;
+    await run(["git", "commit", "-q", "-m", message], root);
+    committed = true;
+  }
+
+  const row = rowOf(epic, story);
+  const title = row ? `${story}: ${row.title}` : story;
+  const body = prBody(epic, story, rel, nextStory);
+  const pushCmd = ["git", "push", "-u", "origin", branch];
+  const prCmd = (bodyFile: string) => [
+    "gh", "pr", "create", "--base", target, "--head", branch, "--title", title, "--body-file", bodyFile,
+  ];
+  const [done, total] = counts(epic);
+  const epicClosed = expectedState(epic) === "closed";
+  const epicPrCmd = [
+    "gh", "pr", "create", "--draft", "--base", config.baseBranch, "--head", target,
+    "--title", `${epic.id}: ${epic.title}`,
+    "--body",
+    `Epic ${epic.id} closed: ${done} of ${total} stories implemented. ` +
+      `See \`${rel}/EPIC.md\` §Ledger. Merge after the last story PR lands.`,
+  ];
+  const result: CloseResult = { committed, message, pushed: false, pr: null, epicPr: null, manual: [] };
+
+  if (opts.noPr) {
+    result.manual.push(shellLine(pushCmd));
+  } else {
+    await run(pushCmd, root);
+    result.pushed = true;
+  }
+  if (opts.noPr || opts.noGh || !(await ghAvailable())) {
+    result.manual.push(shellLine(prCmd(await writeBodyFile(root, story, body))));
+    if (epicClosed) result.manual.push(shellLine(epicPrCmd));
+    return result;
+  }
+
+  const existing = await ghOpenPrs(root, target, branch);
+  if (existing.length > 0) {
+    result.pr = { number: existing[0].number, url: existing[0].url };
+  } else {
+    const url = (await run(prCmd(await writeBodyFile(root, story, body)), root)).trim();
+    result.pr = { number: prNumber(url), url };
+  }
+  if (epicClosed) {
+    const epicPrs = await ghOpenPrs(root, config.baseBranch, target);
+    const url = epicPrs.length > 0 ? epicPrs[0].url : (await run(epicPrCmd, root)).trim();
+    result.epicPr = { url };
+  }
+  return result;
+}
+
+/** The PR in `prs` whose head is `<prefix><story>-*`, matched on the head name only. */
+export function pickMergedPr<T>(prs: Array<{ headRefName: string } & T>, story: string, prefix = "feat/"): T | null {
+  return prs.find((pr) => pr.headRefName.startsWith(`${prefix}${story}-`)) ?? null;
+}
+
+/**
+ * After the story PR merged: require the close commit on the epic tip, read
+ * the merged PR and its comments, and name the next story and its branch.
+ */
+export async function cmdNext(
+  root: string,
+  config: EpicConfig,
+  story: string,
+  opts: { noGh?: boolean } = {},
+): Promise<NextResult> {
+  requireStoryId(story);
+  const d = findEpicDir(root, config, story);
+  const branch = epicBranch(loadLocal(d).epic);
+  await run(["git", "fetch", "origin", "--prune"], root);
+  if (!(await remoteBranchExists(root, branch))) throw new EpicError(`origin/${branch} does not exist`);
+
+  // Merged means: the close commit (ledger entry + handoff) is on the epic tip.
+  const { epic, handoff } = await loadFromRef(root, d, `origin/${branch}`);
+  const problems = checkPackage(epic, handoff);
+  if (problems.length > 0) {
+    throw new EpicError(`the package on origin/${branch} does not pass check:\n  - ${problems.join("\n  - ")}`);
+  }
+  const ledgerIds = epic.ledger.map((l) => l.id);
+  const last = ledgerIds.at(-1) ?? "none";
+  if (ledgerIds.includes(story) && last !== story) {
+    throw new EpicError(
+      `${story} closed earlier; the last story closed on origin/${branch} is ${last}, so run \`next ${last}\``,
+    );
+  }
+  if (last !== story) {
+    throw new EpicError(
+      `${story} is not merged into origin/${branch} yet (last ledger entry there is ${last}); ` +
+        "merge the story PR first, then run next again",
+    );
+  }
+
+  let pr: MergedPr | null = null;
+  let comments: PrComment[] = [];
+  if (!opts.noGh && (await ghAvailable())) {
+    pr = pickMergedPr(await ghMergedPrs(root, branch), story, config.branchPrefix);
+    if (pr === null) {
+      throw new EpicError(`no merged PR into ${branch} has a \`${config.branchPrefix}${story}-*\` head`);
+    }
+    comments = await ghPrComments(root, pr.number);
+  }
+
+  const out: NextResult = { epic: epic.id, epicBranch: branch, closed: { story, pr, comments }, next: null };
+  const nxt = expectedNext(epic);
+  if (nxt !== "none") {
+    // expectedNext() returned an id from the story list, so the row exists.
+    const row = rowOf(epic, nxt) as Row;
+    const slug = (await packetSlug(root, d, branch, nxt)) ?? slugify(row.title);
+    out.next = {
+      story: nxt,
+      title: row.title,
+      lane: row.lane,
+      branch: `${config.branchPrefix}${nxt}-${slug}`,
+      baseRef: `origin/${branch}`,
+    };
+  }
+  return out;
+}
+
+/**
+ * The package for `status` without a ref: the one whose epic branch is checked
+ * out or whose story list holds the checked-out story, else the only one.
+ */
+async function statusDir(root: string, config: EpicConfig): Promise<string> {
+  const base = epicsDir(root, config);
+  const marked = subdirs(base).filter(hasMarkers);
+  if (marked.length === 0) throw new EpicError(`no epic package under ${base}`);
+  const branch = (await runRaw(["git", "rev-parse", "--abbrev-ref", "HEAD"], root)).stdout.trim();
+  const story = branch.startsWith(config.branchPrefix)
+    ? /^([A-Z]{2,}-\d+)-/.exec(branch.slice(config.branchPrefix.length))?.[1]
+    : undefined;
+  const hit = marked.find((d) => {
+    const { epic } = loadLocal(d);
+    return epicBranch(epic) === branch || (story !== undefined && rowOf(epic, story) !== undefined);
+  });
+  if (hit) return hit;
+  if (marked.length === 1) return marked[0];
+  const names = marked.map((d) => basename(d)).join(", ");
+  throw new EpicError(`more than one epic package under ${base}; name one: ${names}`);
+}
+
+/**
+ * Read-only summary of the local package for the panel. `behind` is null when
+ * either branch is missing on the remote; `openPr` is null without gh or when
+ * gh cannot list PRs for this remote.
+ */
+export async function cmdStatus(root: string, config: EpicConfig, ref?: string): Promise<StatusResult> {
+  const d = ref ? findEpicDir(root, config, ref) : await statusDir(root, config);
+  const { epic, handoff } = loadLocal(d);
+  const branch = epicBranch(epic);
+  const count = await runRaw(["git", "rev-list", "--count", `origin/${branch}..origin/${config.baseBranch}`], root);
+  let openPr: StatusResult["openPr"] = null;
+  if (await ghAvailable()) {
+    try {
+      const prs = await ghOpenPrs(root, branch);
+      if (prs.length > 0) openPr = { number: prs[0].number, url: prs[0].url, headRefName: prs[0].headRefName };
+    } catch (err) {
+      // Status never refuses: a remote gh cannot read (not GitHub, no auth) has no PR to show.
+      if (!(err instanceof EpicError)) throw err;
+    }
+  }
+  return {
+    epic: epic.id,
+    title: epic.title,
+    epicBranch: branch,
+    state: epic.status.State ?? "",
+    stories: epic.status.Stories ?? "",
+    next: epic.status.Next ?? "",
+    behind: count.code === 0 ? count.stdout.trim() : null,
+    rows: epic.rows,
+    openPr,
+    problems: checkPackage(epic, handoff),
+  };
 }

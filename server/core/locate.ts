@@ -74,7 +74,7 @@ export function loadLocal(dir: string): { epic: EpicPackage; handoff: Handoff | 
 }
 
 /** `dir` relative to `root`, with `/` separators as git expects. */
-function gitRel(root: string, dir: string): string {
+export function gitRel(root: string, dir: string): string {
   return relative(root, dir).split(sep).join("/");
 }
 

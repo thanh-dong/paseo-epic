@@ -21,8 +21,9 @@ export async function runRaw(cmd: string[], cwd: string): Promise<RunResult> {
     return {
       code: typeof e.code === "number" ? e.code : 1,
       stdout: e.stdout ?? "",
-      // stderr is undefined only when the process never ran (e.g. ENOENT).
-      stderr: e.stderr ?? e.message,
+      // A numeric code is the exit status of a process that ran; a string code
+      // (e.g. ENOENT) means it never started, so stderr is empty and the reason is in message.
+      stderr: typeof e.code === "number" ? (e.stderr ?? "") : e.stderr || e.message,
     };
   }
 }
@@ -67,4 +68,37 @@ export async function ghOpenPrs(
   if (head) cmd.push("--head", head);
   const out = await run(cmd, root);
   return JSON.parse(out || "[]");
+}
+
+export interface MergedPr {
+  number: number;
+  url: string;
+  headRefName: string;
+  mergedAt: string;
+  title: string;
+}
+
+export async function ghMergedPrs(root: string, base: string): Promise<MergedPr[]> {
+  const out = await run(
+    [
+      "gh", "pr", "list", "--base", base, "--state", "merged", "--limit", "100",
+      "--json", "number,url,headRefName,mergedAt,title",
+    ],
+    root,
+  );
+  return JSON.parse(out || "[]");
+}
+
+export interface PrComment {
+  author: string;
+  createdAt: string;
+  body: string;
+}
+
+/** The conversation comments of PR `number`, author flattened to the login. */
+export async function ghPrComments(root: string, number: number): Promise<PrComment[]> {
+  const out = await run(["gh", "pr", "view", String(number), "--json", "comments"], root);
+  const raw: Array<{ author?: { login?: string }; createdAt?: string; body?: string }> =
+    JSON.parse(out || "{}").comments ?? [];
+  return raw.map((c) => ({ author: c.author?.login ?? "", createdAt: c.createdAt ?? "", body: c.body ?? "" }));
 }

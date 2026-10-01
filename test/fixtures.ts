@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { expect } from "vitest";
-import { cmdCheck, cmdInit, cmdRender } from "../server/core/commands";
+import { type CloseResult, cmdCheck, cmdClose, cmdInit, cmdRender, cmdStart } from "../server/core/commands";
 import { loadConfig } from "../server/core/config";
 import { currentBranch } from "../server/core/git";
 import { today } from "../server/core/slug";
@@ -23,6 +23,10 @@ export const TODAY = today();
 export const ROWS = `| TH-901 First thing | Builds the first thing. | normal | implemented | 2026-09-06 PR #1 |
 | TH-902 Second thing | Builds the second thing. | normal | planned | |
 | TH-903 Third thing | Builds the third thing. | high-risk | planned | |`;
+
+export const ROW_901_PLANNED = "| TH-901 First thing | Builds the first thing. | normal | planned | |";
+export const ROW_901_DONE =
+  "| TH-901 First thing | Builds the first thing. | normal | implemented | 2026-09-06 PR #1 |";
 
 export const LEDGER_901 = `
 ### TH-901 — 2026-09-06
@@ -133,5 +137,29 @@ export class RemoteFixture {
     await git(this.root, "commit", "-q", "-m", "plan E99");
     await git(this.root, "push", "-q", "-u", "origin", "epic/E99-test-epic");
     return dir;
+  }
+
+  /** The agent's side of TH-901: implemented row, ledger entry, handoff for TH-902. */
+  mark901Done(dir: string): void {
+    const f = join(dir, "EPIC.md");
+    writeFileSync(
+      f,
+      readFileSync(f, "utf8")
+        .replace(ROW_901_PLANNED, ROW_901_DONE)
+        .replace("## Dependencies", `${LEDGER_901}\n## Dependencies`),
+    );
+    const h = join(dir, "HANDOFF.md");
+    writeFileSync(h, readFileSync(h, "utf8").replace("after=none next=TH-901", "after=TH-901 next=TH-902"));
+  }
+
+  /** Start TH-901, commit story work, update the package, close with noPr. */
+  async close901(dir: string): Promise<CloseResult> {
+    const cfg = loadConfig(this.root);
+    await cmdStart(this.root, cfg, "TH-901", { noGh: true });
+    writeFileSync(join(this.root, "one.ts"), "export const one = 1\n");
+    await git(this.root, "add", "-A");
+    await git(this.root, "commit", "-q", "-m", "feat(TH-901): one");
+    this.mark901Done(dir);
+    return cmdClose(this.root, cfg, "TH-901", { noPr: true, noGh: true });
   }
 }
