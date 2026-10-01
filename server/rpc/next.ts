@@ -80,15 +80,17 @@ export function createSpawnNext(deps: {
         message:
           `A workspace for ${title} already exists on branch ${next.branch}` +
           `${hit.directory ? ` at ${hit.directory}` : ""}; no new agent was started. ` +
-          `Continue there, and start an agent with \`/epic start ${next.story}\` if none is running. ` +
+          "Do not start an agent yourself. Tell the user the story continues in that workspace, " +
+          `and that they can start an agent there with \`/epic start ${next.story}\` if none is running. ` +
           "This session is finished.",
       };
     }
 
-    // A local branch with no workspace on it: Paseo's branch-off refuses it, and that refusal stands.
-    const branchNote = (await deps.localBranchExists(root, next.branch))
-      ? `Note: a local branch ${next.branch} already existed before the workspace was created.`
-      : "";
+    // A local branch with no workspace on it (an earlier spawn that failed after the
+    // branch was cut, or a branch made by hand): check it out instead of branching off,
+    // since branch-off refuses a branch that exists.
+    const reuse = await deps.localBranchExists(root, next.branch);
+    const branchNote = reuse ? `The worktree reused the existing local branch ${next.branch}.` : "";
     const profiles = (await deps.paseo.config.get()).config.agentProfiles ?? [];
     const config = agentConfig(pickProfile(profiles, cfg.profile));
 
@@ -96,17 +98,24 @@ export function createSpawnNext(deps: {
     try {
       workspace = await deps.paseo.workspaces.create({
         title,
-        source: {
-          kind: "worktree",
-          cwd: root,
-          action: "branch-off",
-          baseBranch: next.baseRef,
-          branchName: next.branch,
-        },
+        source: reuse
+          ? { kind: "worktree", cwd: root, action: "checkout", refName: next.branch }
+          : {
+              kind: "worktree",
+              cwd: root,
+              action: "branch-off",
+              baseBranch: next.baseRef,
+              branchName: next.branch,
+            },
+        // A retry of the same spawn (a second `next`, the RPC racing the hook) gets the same workspace.
+        idempotencyKey: `epic:${next.branch}`,
       });
     } catch (err) {
-      if (!branchNote) throw err;
-      throw new Error(`${(err as Error).message} (${branchNote})`, { cause: err });
+      if (!reuse) throw err;
+      const reason = err instanceof Error ? err.message : String(err);
+      throw new Error(`${reason} (the local branch ${next.branch} already existed and was checked out)`, {
+        cause: err,
+      });
     }
     const agent = await workspace.agents.create({
       config,

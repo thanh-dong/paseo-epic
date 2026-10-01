@@ -111,6 +111,7 @@ test("spawns the successor with the handoff prompt and the PR answers", async ()
         baseBranch: "origin/epic/E99-test-epic",
         branchName: "feat/TH-902-second-thing",
       },
+      idempotencyKey: "epic:feat/TH-902-second-thing",
     },
   ]);
   expect(calls.agents).toHaveLength(1);
@@ -177,13 +178,31 @@ test("does not spawn twice", async () => {
   expect(first.spawned?.agentId).toBe("ag_1");
   expect(second.spawned).toEqual({ workspaceId: "ws_1", agentId: "", title: "TH-902 Second thing" });
   expect(second.message).toContain("already exists");
+  expect(second.message).toContain("Do not start an agent yourself. Tell the user");
 });
 
-test("a local branch without a workspace is noted, and the workspace is still created", async () => {
+test("a local branch without a workspace is checked out into the new worktree", async () => {
   const { paseo, calls } = fakePaseo();
   const out = await spawner(paseo, { localBranch: true })({ root: "/repo", story: "TH-901" });
-  expect(calls.workspaces).toHaveLength(1);
-  expect(out.message).toContain("local branch feat/TH-902-second-thing already existed");
+  expect(calls.workspaces).toEqual([
+    {
+      title: "TH-902 Second thing",
+      source: { kind: "worktree", cwd: "/repo", action: "checkout", refName: "feat/TH-902-second-thing" },
+      idempotencyKey: "epic:feat/TH-902-second-thing",
+    },
+  ]);
+  expect(calls.agents).toHaveLength(1);
+  expect(out.message).toContain("reused the existing local branch feat/TH-902-second-thing");
+});
+
+test("a failed checkout of an existing local branch says so", async () => {
+  const { paseo } = fakePaseo();
+  (paseo.workspaces as unknown as { create: () => Promise<never> }).create = async () => {
+    throw new Error("worktree already checked out");
+  };
+  await expect(spawner(paseo, { localBranch: true })({ root: "/repo", story: "TH-901" })).rejects.toThrow(
+    "worktree already checked out (the local branch feat/TH-902-second-thing already existed and was checked out)",
+  );
 });
 
 test("closed epic spawns nothing", async () => {
