@@ -1,0 +1,40 @@
+{
+  "name": "paseo-epic",
+  "private": true,
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "paseo-plugin.json",
+    "index.client.ts",
+    "index.client.tsx",
+    "index.server.ts",
+    "index.server.tsx",
+    "client/",
+    "server/",
+    "shared/",
+    "mcp/",
+    "templates/",
+    "scripts/"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "build:mcp": "esbuild server/mcp/main.ts --bundle --platform=node --format=esm --target=node20 --outfile=mcp/epic-mcp.mjs --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && node scripts/gen-mcp-module.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.31",
+    "yaml": "^2.9"
+  },
+  "devDependencies": {
+    "@getpaseo/plugin": "0.10.2",
+    "@tanstack/react-query": "^5.90.11",
+    "@types/node": "^20",
+    "@types/react": "~19.2.0",
+    "esbuild": "^0.25",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "typescript": "^5.9.3",
+    "vitest": "^4",
+    "zod": "^4.4.3"
+  }
+}

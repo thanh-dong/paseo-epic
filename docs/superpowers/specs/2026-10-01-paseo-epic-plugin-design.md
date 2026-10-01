@@ -214,6 +214,8 @@ normal file tools, then calls `epic_close_check` until clean, then
 so the agent never calls Paseo tools. Codex and Claude agents get the same
 flow.
 
+Implementation note (2026-10-01): epic_next reports "Spawn pending"; the plugin's agent.turn_ended hook performs the spawn, since the MCP process has no daemon SDK.
+
 ## 7. The human side (client)
 
 ### Epic panel
