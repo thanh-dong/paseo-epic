@@ -10,9 +10,13 @@ Before you start: plugins must be enabled on the daemon (`pluginsEnabled:
 true`, see "Enable plugins" in [README.md](README.md)). Enabling them is the
 user's decision. Ask first, with Paseo's trust warning.
 
-Install the plugin from this clone and check that it runs:
+Install the runtime dependencies in the clone first (a local-path install
+does not run the build steps, and the server bundle needs `yaml` from
+`node_modules`), then install the plugin from this clone and check that it
+runs:
 
 ```bash
+(cd /Volumes/ExDrive/_sources/paseo-epic && npm ci --omit=dev)
 npx -y @getpaseo/cli@0.10.2 plugin install /Volumes/ExDrive/_sources/paseo-epic
 npx -y @getpaseo/cli@0.10.2 plugin ls
 npx -y @getpaseo/cli@0.10.2 plugin logs epic

@@ -61,9 +61,13 @@ From npm, once the package is published under your scope (today it is
 paseo plugin install npm:@<scope>/paseo-epic
 ```
 
-From a local clone:
+From a local clone, install the runtime dependencies first. The server
+bundle needs `yaml` from the clone's `node_modules`, and a local-path install
+does not run the build steps:
 
 ```bash
+cd /absolute/path/to/paseo-epic
+npm ci --omit=dev
 paseo plugin install /absolute/path/to/paseo-epic
 ```
 
@@ -81,9 +85,14 @@ a global upgrade. Run the 0.10.2 CLI through `npx`:
 npx -y @getpaseo/cli@0.10.2 plugin install github:<owner>/paseo-epic
 ```
 
-For a GitHub install, Paseo runs the build steps from `paseo-plugin.json`:
-`npm ci`, then `npm run build:mcp`. The built MCP server
-(`mcp/epic-mcp.mjs`) is also committed, so a local clone works as is.
+For a GitHub install, Paseo runs the build step from `paseo-plugin.json`:
+`npm ci --omit=dev`. Paseo itself supplies `zod`, React and React Native;
+`yaml` comes from the plugin's `node_modules`. The MCP server is committed
+already built (`mcp/epic-mcp.mjs`, and the same script inside
+`server/mcp/bundle.generated.ts`), so no build runs at install. The plugin
+writes that script once to `<tmpdir>/paseo-epic/epic-mcp-<hash>.mjs` and
+starts it from there. After you change `server/mcp/main.ts` or what it
+imports, run `npm run build:mcp` and commit both outputs.
 
 The MCP server runs under plain `node`. The plugin uses `PASEO_EPIC_NODE`
 when it is set in the daemon's environment, else `node` on `PATH`, else the
