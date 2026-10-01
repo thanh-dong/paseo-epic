@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 480" width="1200" height="480" role="img" aria-labelledby="title desc">
+  <title id="title">paseo-epic</title>
+  <desc id="desc">Run an epic story by story in Paseo. A story agent opens a pull request, a human merges it and replies next, and a fresh agent starts the next story. EPIC.md and HANDOFF.md carry the state.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#111827"/>
+      <stop offset="1" stop-color="#0b1120"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="480" rx="24" fill="url(#bg)"/>
+  <rect x="0.5" y="0.5" width="1199" height="479" rx="24" fill="none" stroke="#1f2937"/>
+
+  <g font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+    <!-- Header -->
+    <text x="72" y="74" font-size="15" font-weight="600" letter-spacing="2.5" fill="#5b9bff">A PLUGIN FOR PASEO</text>
+    <text x="72" y="140" font-size="64" font-weight="700" fill="#f8fafc">paseo-epic</text>
+    <text x="72" y="186" font-size="26" fill="#cbd5e1">Run an epic story by story. One fresh agent per story. You merge, then say next.</text>
+
+    <!-- Loop: four steps -->
+    <line x1="292" y1="292" x2="348" y2="292" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrow)"/>
+    <line x1="572" y1="292" x2="628" y2="292" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrow)"/>
+    <line x1="852" y1="292" x2="908" y2="292" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrow)"/>
+
+    <rect x="72" y="250" width="220" height="84" rx="14" fill="#0f1b33" stroke="#5b9bff" stroke-width="2"/>
+    <text x="182" y="286" text-anchor="middle" font-size="22" font-weight="600" fill="#f8fafc">Story agent</text>
+    <text x="182" y="312" text-anchor="middle" font-size="17" fill="#94a3b8">builds story N</text>
+
+    <rect x="352" y="250" width="220" height="84" rx="14" fill="#231b0c" stroke="#f5b544" stroke-width="2"/>
+    <text x="462" y="286" text-anchor="middle" font-size="22" font-weight="600" fill="#f8fafc">Pull request</text>
+    <text x="462" y="312" text-anchor="middle" font-size="17" fill="#94a3b8">you review and merge</text>
+
+    <rect x="632" y="250" width="220" height="84" rx="14" fill="#231b0c" stroke="#f5b544" stroke-width="2"/>
+    <text x="742" y="286" text-anchor="middle" font-size="22" font-weight="600" fill="#f8fafc">You reply "next"</text>
+    <text x="742" y="312" text-anchor="middle" font-size="17" fill="#94a3b8">your one action</text>
+
+    <rect x="912" y="250" width="220" height="84" rx="14" fill="#0f1b33" stroke="#5b9bff" stroke-width="2"/>
+    <text x="1022" y="286" text-anchor="middle" font-size="22" font-weight="600" fill="#f8fafc">Fresh agent</text>
+    <text x="1022" y="312" text-anchor="middle" font-size="17" fill="#94a3b8">starts story N+1</text>
+
+    <!-- Return path: the fresh agent becomes the next story agent -->
+    <path d="M1022 334 V410 H182 V338" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 6" marker-end="url(#arrow)"/>
+
+    <!-- The two files that carry the state -->
+    <g>
+      <path d="M392 384 H520 L536 400 V436 H392 Z" fill="#111827" stroke="#e2e8f0" stroke-width="2"/>
+      <path d="M520 384 V400 H536" fill="none" stroke="#e2e8f0" stroke-width="2"/>
+      <text x="464" y="417" text-anchor="middle" font-size="18" font-weight="600" fill="#f8fafc">EPIC.md</text>
+      <text x="464" y="462" text-anchor="middle" font-size="16" fill="#94a3b8">plan, stories, ledger</text>
+    </g>
+    <g>
+      <path d="M664 384 H792 L808 400 V436 H664 Z" fill="#111827" stroke="#e2e8f0" stroke-width="2"/>
+      <path d="M792 384 V400 H808" fill="none" stroke="#e2e8f0" stroke-width="2"/>
+      <text x="736" y="417" text-anchor="middle" font-size="18" font-weight="600" fill="#f8fafc">HANDOFF.md</text>
+      <text x="736" y="462" text-anchor="middle" font-size="16" fill="#94a3b8">brief for the next story</text>
+    </g>
+  </g>
+</svg>
