@@ -188,7 +188,7 @@ owner, member or collaborator of the repo is marked
 
 The new agent uses the launch profile named by `.epic.yml` `profile` (by id
 or name). Without one, it uses the first profile whose notes mention "story"
-or "epic". Without such a profile, it is a plain `claude` agent.
+or "epic". Without such a profile, it is a `claude` agent on the daemon's default model for that provider; a profile with no model gets its provider's default too.
 
 ## `.epic.yml`
 

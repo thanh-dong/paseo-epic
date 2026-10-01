@@ -23,7 +23,7 @@ error. So is a wrong type or a YAML syntax error. With a bad file:
 | `templates` | string | none (the shipped templates) | A folder, relative to the repo root, with your own `epic.md` and `handoff.md`. `init` uses a file from it when the file exists, else the shipped one. |
 | `branchPrefix` | string | `feat/` | The prefix of story branches: `<branchPrefix><story>-<slug>`. `next` also uses it to find the merged story PR by its head branch. |
 | `baseBranch` | string | `main` | The branch `init` cuts the epic branch from (`origin/<baseBranch>`), and the base of the draft epic PR. The panel shows how many commits the epic branch is behind it. |
-| `profile` | string | none | The Paseo launch profile for successor agents, matched by profile id or name. Without it, the first profile whose notes mention "story" or "epic"; without that, a plain `claude` agent. |
+| `profile` | string | none | The Paseo launch profile for successor agents, matched by profile id or name. Without it, the first profile whose notes mention "story" or "epic"; without that, a `claude` agent on the provider's default model (`providers.listModels`); a profile with no model gets its provider's default too. |
 | `hooks.start` | list of strings | `[]` | Lines added to the "what to do now" text after `epic_start`. |
 | `hooks.close` | list of strings | `[]` | Lines for the agent before close. `epic_close_check` quotes them after its "what to do now" paragraph, one per line, whether the package is ready or not. |
 | `hooks.nextPrompt` | string | none | Text appended to the successor agent's first prompt, after the PR comments. |
