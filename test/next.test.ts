@@ -77,6 +77,19 @@ function fakePaseo(profiles: Profile[] = []) {
       },
     },
     config: { get: async () => ({ requestId: "r", config: { agentProfiles: profiles } }) },
+    providers: {
+      listModels: async (provider: string) => {
+        if (provider === "down") throw new Error("provider offline");
+        if (provider === "empty") return { provider, models: [] };
+        return {
+          provider,
+          models: [
+            { id: `${provider}-older`, label: "Older" },
+            { id: `${provider}-default`, label: "Default", isDefault: true },
+          ],
+        };
+      },
+    },
   } as unknown as PaseoApi;
   return { paseo, calls };
 }
@@ -125,7 +138,7 @@ test("spawns the successor with the handoff prompt and the PR answers", async ()
   expect(prompt).toContain("Use the story profile.");
   expect(agent.labels).toEqual({ "epic.story": "TH-902" });
   expect(agent.title).toBe("TH-902 Second thing");
-  expect(agent.config).toEqual({ provider: "claude" });
+  expect(agent.config).toEqual({ provider: "claude/claude-default" });
 
   expect(out.spawned).toEqual({ workspaceId: "ws_1", agentId: "ag_1", title: "TH-902 Second thing" });
   expect(out.message).toContain('Started agent "TH-902 Second thing"');
@@ -144,13 +157,13 @@ test("uses the named profile", async () => {
 test("matches the named profile by its name too", async () => {
   const { paseo, calls } = fakePaseo([{ id: "p1", name: "Story", provider: "codex", thinkingOptionId: "high" }]);
   await spawner(paseo, { config: { ...baseConfig, profile: "Story" } })({ root: "/repo", story: "TH-901" });
-  expect(calls.agents[0].config).toEqual({ provider: "codex", thinkingOptionId: "high" });
+  expect(calls.agents[0].config).toEqual({ provider: "codex/codex-default", thinkingOptionId: "high" });
 });
 
 test("a named profile that does not exist falls back to the notes", async () => {
   const { paseo, calls } = fakePaseo([{ id: "e", name: "E", provider: "codex", notes: "for epics" }]);
   await spawner(paseo, { config: { ...baseConfig, profile: "missing" } })({ root: "/repo", story: "TH-901" });
-  expect(calls.agents[0].config).toEqual({ provider: "codex" });
+  expect(calls.agents[0].config).toEqual({ provider: "codex/codex-default" });
 });
 
 test("without a named profile, picks the first whose notes mention story or epic", async () => {
@@ -460,4 +473,16 @@ test("a ref picks that package's last closed story when a higher package exists"
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("a provider that lists no model refuses the spawn with the fix", async () => {
+  const { paseo, calls } = fakePaseo([{ id: "e", name: "E", provider: "empty", notes: "story" }]);
+  await expect(spawner(paseo)({ root: "/repo", story: "TH-901" })).rejects.toThrow(/provider empty lists no model; create a Paseo profile/);
+  expect(calls.agents).toHaveLength(0);
+});
+
+test("a provider that cannot be asked for models refuses the spawn and names the reason", async () => {
+  const { paseo, calls } = fakePaseo([{ id: "d", name: "D", provider: "down", notes: "story" }]);
+  await expect(spawner(paseo)({ root: "/repo", story: "TH-901" })).rejects.toThrow(/no model for provider down \(provider offline\)/);
+  expect(calls.agents).toHaveLength(0);
 });

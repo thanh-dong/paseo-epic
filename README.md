@@ -243,7 +243,7 @@ entries, the handoff header, and the five headings.
   package is published (the package is not on npm yet).
 - **Profile fallback.** Without `profile` in `.epic.yml`, the successor uses
   the first launch profile whose notes mention "story" or "epic", else a
-  plain `claude` agent. Set `profile` to be explicit.
+  `claude` agent on the provider's default model. Set `profile` to be explicit.
 - **Cancelled turns.** If the closing agent's turn does not end normally,
   nothing is spawned. Press **Start next story** instead.
 - **Manual checks.** Some live checks are still pending (panel layouts, the

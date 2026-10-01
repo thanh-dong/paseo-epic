@@ -39,15 +39,41 @@ function pickProfile(profiles: AgentProfile[], named: string | undefined): Agent
   return byName ?? profiles.find((p) => /story|epic/i.test(p.notes ?? ""));
 }
 
-/** The profile materialized into an agent config; with no profile, plain `claude`. */
-function agentConfig(profile: AgentProfile | undefined) {
-  if (!profile) return { provider: "claude" };
+/** The provider the spawn uses when no profile names one. */
+const DEFAULT_PROVIDER = "claude";
+
+/**
+ * The provider's default model from the daemon (`providers.listModels`), else
+ * its first model. The agent config wants `provider/model`; a bare provider is
+ * refused, so a spawn with no model to name cannot start.
+ */
+async function defaultModelFor(paseo: PaseoApi, provider: string): Promise<string> {
+  let models: Array<{ id: string; isDefault?: boolean }>;
+  try {
+    models = (await paseo.providers.listModels(provider as Parameters<PaseoApi["providers"]["listModels"]>[0])).models ?? [];
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new EpicError(`no model for provider ${provider} (${reason}); create a Paseo profile with a model, or name one in .epic.yml`);
+  }
+  const model = models.find((m) => m.isDefault) ?? models[0];
+  if (!model) throw new EpicError(`provider ${provider} lists no model; create a Paseo profile with a model`);
+  return model.id;
+}
+
+/**
+ * The profile materialized into an agent config. With no profile, `claude` on
+ * its default model; a profile with no model gets its provider's default too.
+ */
+async function agentConfig(paseo: PaseoApi, profile: AgentProfile | undefined) {
+  const provider = profile?.provider ?? DEFAULT_PROVIDER;
+  const model = profile?.model ?? (await defaultModelFor(paseo, provider));
   const config: {
     provider: string;
     modeId?: string;
     thinkingOptionId?: string;
     featureValues?: Record<string, unknown>;
-  } = { provider: profile.model ? `${profile.provider}/${profile.model}` : profile.provider };
+  } = { provider: `${provider}/${model}` };
+  if (!profile) return config;
   if (profile.modeId) config.modeId = profile.modeId;
   if (profile.thinkingOptionId) config.thinkingOptionId = profile.thinkingOptionId;
   if (profile.featureValues) config.featureValues = profile.featureValues;
@@ -92,7 +118,7 @@ export function createSpawnNext(deps: {
     const reuse = await deps.localBranchExists(root, next.branch);
     const branchNote = reuse ? `The worktree reused the existing local branch ${next.branch}.` : "";
     const profiles = (await deps.paseo.config.get()).config.agentProfiles ?? [];
-    const config = agentConfig(pickProfile(profiles, cfg.profile));
+    const config = await agentConfig(deps.paseo, pickProfile(profiles, cfg.profile));
 
     let workspace: Awaited<ReturnType<PaseoApi["workspaces"]["create"]>>;
     try {
