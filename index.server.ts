@@ -15,6 +15,25 @@ function repoRoot(cwd: string): string {
   }
 }
 
+/**
+ * The node that runs the MCP server. The daemon runs under the Paseo Helper
+ * (Electron), so `process.execPath` is not plain node: prefer
+ * `PASEO_EPIC_NODE`, then `node` on PATH, then Electron run as node.
+ */
+export function resolveNodePath(): { command: string; env?: Record<string, string> } {
+  const configured = process.env.PASEO_EPIC_NODE;
+  if (configured) return { command: configured };
+  try {
+    const finder = process.platform === "win32" ? "where" : "which";
+    const out = execFileSync(finder, ["node"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    const found = out.split(/\r?\n/)[0].trim();
+    if (found) return { command: found };
+  } catch {
+    // No node on PATH: fall through to Electron.
+  }
+  return { command: process.execPath, env: { ELECTRON_RUN_AS_NODE: "1" } };
+}
+
 /** Bad `.epic.yml` messages already logged, so each is logged once. */
 const reported = new Set<string>();
 
@@ -36,9 +55,15 @@ function detectEpic(root: string): boolean {
 
 export default function contribute(server: PluginServerContext) {
   const mcpPath = fileURLToPath(new URL("./mcp/epic-mcp.mjs", import.meta.url));
-  const nodePath = process.execPath;
+  const node = resolveNodePath();
   const removeHook = server.before("agent.create", ({ request }) =>
-    injectEpicMcp(request, { mcpPath, nodePath, isEpicRepo: detectEpic, repoRoot }),
+    injectEpicMcp(request, {
+      mcpPath,
+      nodePath: node.command,
+      nodeEnv: node.env,
+      isEpicRepo: detectEpic,
+      repoRoot,
+    }),
   );
   registerHandlers(server, { spawnNext });
   return () => {

@@ -1,8 +1,17 @@
 import type { AgentSessionConfig, McpStdioServerConfig } from "@getpaseo/protocol/agent-types";
 
-/** The stdio `epic` MCP server: the bundled script run by the daemon's node, given the repo root. */
-export function buildMcpConfig(mcpPath: string, repoRoot: string, nodePath: string): McpStdioServerConfig {
-  return { type: "stdio", command: nodePath, args: [mcpPath, repoRoot], alwaysLoad: true };
+/**
+ * The stdio `epic` MCP server: the bundled script run by node, given the repo
+ * root. `env` is set when the node command needs it (Electron run as node).
+ */
+export function buildMcpConfig(
+  mcpPath: string,
+  repoRoot: string,
+  nodePath: string,
+  env?: Record<string, string>,
+): McpStdioServerConfig {
+  const config: McpStdioServerConfig = { type: "stdio", command: nodePath, args: [mcpPath, repoRoot], alwaysLoad: true };
+  return env ? { ...config, env } : config;
 }
 
 /**
@@ -15,6 +24,7 @@ export function injectEpicMcp(
   opts: {
     mcpPath: string;
     nodePath: string;
+    nodeEnv?: Record<string, string>;
     isEpicRepo: (cwd: string) => boolean;
     repoRoot: (cwd: string) => string;
   },
@@ -25,7 +35,7 @@ export function injectEpicMcp(
     ...request,
     config: {
       ...request.config,
-      mcpServers: { ...request.config.mcpServers, epic: buildMcpConfig(opts.mcpPath, root, opts.nodePath) },
+      mcpServers: { ...request.config.mcpServers, epic: buildMcpConfig(opts.mcpPath, root, opts.nodePath, opts.nodeEnv) },
     },
   };
 }

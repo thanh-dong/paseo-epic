@@ -129,7 +129,7 @@ export const nextRpc = defineRpc({
 });
 
 export const isEpicRpc = defineRpc({
-  name: "epic.isEpic",
+  name: "epic.is-epic",
   input: z.object({ workspaceDir }),
   output: z.object({ epic: z.boolean() }),
 });

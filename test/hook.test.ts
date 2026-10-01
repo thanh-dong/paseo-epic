@@ -1,11 +1,12 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { afterEach, expect, test } from "vitest";
+import { resolveNodePath } from "../index.server";
 import { loadConfig } from "../server/core/config";
 import { isEpicRepo } from "../server/core/locate";
 import { STATUS_BEGIN, STATUS_END } from "../server/core/types";
-import { injectEpicMcp } from "../server/hooks/inject-mcp";
+import { buildMcpConfig, injectEpicMcp } from "../server/hooks/inject-mcp";
 
 const opts = {
   mcpPath: "/p/mcp/epic-mcp.mjs",
@@ -71,4 +72,34 @@ test("isEpicRepo needs the status markers", () => {
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("buildMcpConfig puts env on the stdio config only when given", () => {
+  expect(buildMcpConfig("/p/m.mjs", "/wt", "/app/Paseo Helper", { ELECTRON_RUN_AS_NODE: "1" })).toEqual({
+    type: "stdio",
+    command: "/app/Paseo Helper",
+    args: ["/p/m.mjs", "/wt"],
+    env: { ELECTRON_RUN_AS_NODE: "1" },
+    alwaysLoad: true,
+  });
+  expect(buildMcpConfig("/p/m.mjs", "/wt", "/usr/bin/node")).not.toHaveProperty("env");
+});
+
+test("injectEpicMcp passes the node env through", () => {
+  const out = injectEpicMcp(
+    { config: { provider: "claude", cwd: "/wt" } },
+    { ...opts, nodeEnv: { ELECTRON_RUN_AS_NODE: "1" } },
+  );
+  expect(out?.config.mcpServers?.epic).toEqual({ ...epicServer, env: { ELECTRON_RUN_AS_NODE: "1" } });
+});
+
+const savedNode = process.env.PASEO_EPIC_NODE;
+afterEach(() => {
+  if (savedNode === undefined) delete process.env.PASEO_EPIC_NODE;
+  else process.env.PASEO_EPIC_NODE = savedNode;
+});
+
+test("resolveNodePath prefers PASEO_EPIC_NODE", () => {
+  process.env.PASEO_EPIC_NODE = "/opt/node22/bin/node";
+  expect(resolveNodePath()).toEqual({ command: "/opt/node22/bin/node" });
 });
