@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { NextResult } from "../server/core/commands";
-import { afterClose, afterCloseCheck, afterNext, nextPrompt } from "../server/core/text";
+import { afterClose, afterCloseCheck, afterNext, nextPrompt, parsePendingLine, pendingLine } from "../server/core/text";
 
 // The copy pinned here is fixed by spec sections 6 and 8.
 
@@ -78,4 +78,19 @@ test("nextPrompt carries the start line, the PR answers and the extra line", () 
 test("nextPrompt with no comments says none", () => {
   const text = nextPrompt({ ...result, closed: { ...result.closed, comments: [] } });
   expect(text).toContain("Answers from PR #276 (conversation comments, oldest first):\nnone");
+});
+
+test("pendingLine is the exact handshake line and parsePendingLine reads it back", () => {
+  const line = pendingLine("TH-667", "TH-666");
+  expect(line).toBe("Spawn pending for TH-667 after TH-666: the plugin starts the successor now.");
+  expect(parsePendingLine(line)).toEqual({ next: "TH-667", closed: "TH-666" });
+});
+
+test("parsePendingLine matches a whole line only", () => {
+  const line = pendingLine("TH-667", "TH-666");
+  expect(parsePendingLine(`  "body": "${line}"`)).toBeNull();
+  expect(parsePendingLine(`${line} And more.`)).toBeNull();
+  expect(parsePendingLine("Spawn pending for th-667 after TH-666: the plugin starts the successor now.")).toBeNull();
+  expect(parsePendingLine("Spawn pending for TH-667: the plugin starts the successor now.")).toBeNull();
+  expect(parsePendingLine("")).toBeNull();
 });

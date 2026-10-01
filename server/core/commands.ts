@@ -37,7 +37,10 @@ import {
 import { ledgerEntry, parseEpic, splitLines } from "./parse";
 import { slugify, today } from "./slug";
 import { templateText } from "./templates";
-import { EPIC_ID_RE, type EpicPackage, EpicError, type Row, STORY_ID_RE } from "./types";
+import { EPIC_ID_RE, type EpicPackage, EpicError, type Row, STORY_ID_BODY, STORY_ID_RE } from "./types";
+
+/** A story branch name after its prefix: `<story>-<slug>`. */
+const STORY_BRANCH_RE = new RegExp(`^(${STORY_ID_BODY})-`);
 
 const DIRTY = "working tree has uncommitted changes; commit or stash them first";
 
@@ -519,7 +522,7 @@ export async function statusDir(root: string, config: EpicConfig): Promise<strin
   if (packages.length === 0) throw new EpicError(`no epic package under ${base}; run init first`);
   const branch = (await runRaw(["git", "rev-parse", "--abbrev-ref", "HEAD"], root)).stdout.trim();
   const story = branch.startsWith(config.branchPrefix)
-    ? /^([A-Z]{2,}-\d+)-/.exec(branch.slice(config.branchPrefix.length))?.[1]
+    ? STORY_BRANCH_RE.exec(branch.slice(config.branchPrefix.length))?.[1]
     : undefined;
   const hit = packages.find(
     ({ epic }) => epicBranch(epic) === branch || (story !== undefined && rowOf(epic, story) !== undefined),

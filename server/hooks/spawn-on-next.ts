@@ -1,23 +1,46 @@
 import type { PaseoApi } from "@getpaseo/client";
 import type { PluginServerContext } from "@getpaseo/plugin/server";
 import type { AgentTimelineItem } from "@getpaseo/protocol/agent-types";
+import { parsePendingLine } from "../core/text";
 import type { SpawnNext } from "../core/types";
 
-// The MCP process has no daemon SDK, so `epic_next` only reports
-// "Spawn pending for <story>" and this hook performs the spawn when the turn ends.
+// The MCP process has no daemon SDK, so `epic_next` prints a pending line
+// ("Spawn pending for <next> after <closed>: ...") as the first line of its
+// output, and this hook performs the spawn when the turn ends.
 
-const PENDING_RE = /Spawn pending for ([A-Z]{2,}-\d+)/;
+/** The tool name, bare or with an MCP server prefix (`mcp__epic__epic_next`). */
+const EPIC_NEXT_RE = /(?:^|__|[.:/])epic_next$/;
+
+/**
+ * The text a tool call returned: every string in its detail except the
+ * input, so the announced ids come from what the tool said, never from what
+ * the agent sent. Providers shape the output differently (a string, MCP
+ * `content` parts, ...), so the detail is walked rather than read by shape.
+ */
+function outputTexts(detail: unknown): string[] {
+  const out: string[] = [];
+  const walk = (value: unknown, key: string | null): void => {
+    if (key === "input") return;
+    if (typeof value === "string") out.push(value);
+    else if (Array.isArray(value)) for (const v of value) walk(v, null);
+    else if (value !== null && typeof value === "object") {
+      for (const [k, v] of Object.entries(value)) walk(v, k);
+    }
+  };
+  walk(detail, null);
+  return out;
+}
 
 /**
  * The spawn an `epic_next` tool call asked for in the current turn. The hook
  * gets the whole conversation, so only items after the latest user message
- * count; otherwise every later turn would see the same call again. The tool
- * name may carry an MCP prefix (`mcp__epic__epic_next`), and the result may
- * sit in any detail field, so the whole item is searched as text.
+ * count; otherwise every later turn would see the same call again. The output
+ * is read line by line and only a whole pending line counts: the PR comments
+ * inside the JSON are escaped onto one line each, so a comment cannot forge one.
  */
 export function pendingNextFromTimeline(
   timeline: readonly AgentTimelineItem[],
-): { story: string; callId: string | null } | null {
+): { next: string; closed: string; callId: string | null } | null {
   let start = 0;
   for (let i = timeline.length - 1; i >= 0; i--) {
     if (timeline[i]?.type === "user_message") {
@@ -27,9 +50,13 @@ export function pendingNextFromTimeline(
   }
   for (let i = timeline.length - 1; i >= start; i--) {
     const item = timeline[i] as { type?: unknown; name?: unknown; callId?: unknown; detail?: unknown };
-    if (item?.type !== "tool_call" || typeof item.name !== "string" || !item.name.endsWith("epic_next")) continue;
-    const match = PENDING_RE.exec(JSON.stringify(item.detail ?? null));
-    if (match) return { story: match[1], callId: typeof item.callId === "string" ? item.callId : null };
+    if (item?.type !== "tool_call" || typeof item.name !== "string" || !EPIC_NEXT_RE.test(item.name)) continue;
+    for (const text of outputTexts(item.detail)) {
+      for (const line of text.split(/\r?\n/)) {
+        const pending = parsePendingLine(line);
+        if (pending) return { ...pending, callId: typeof item.callId === "string" ? item.callId : null };
+      }
+    }
   }
   return null;
 }
@@ -48,20 +75,23 @@ export function registerSpawnOnNext(
     if (event.outcome.kind !== "completed") return;
     const pending = pendingNextFromTimeline(event.timeline);
     if (!pending) return;
-    const key = `${event.agent.id}:${pending.callId ?? pending.story}`;
+    const key = `${event.agent.id}:${pending.callId ?? pending.next}`;
     if (handled.has(key)) return;
     handled.add(key);
 
     let text: string;
     try {
-      // The pending line names the next story; `next` takes the closed one, which is the
-      // last ledger entry of the agent's worktree (the same default the RPC uses).
-      const out = await deps.spawnNextFor(paseo)({ root: deps.repoRoot(event.agent.cwd) });
-      text = out.message;
+      const out = await deps.spawnNextFor(paseo)({ root: deps.repoRoot(event.agent.cwd), story: pending.closed });
+      const found = out.next?.story ?? "none";
+      text =
+        found === pending.next
+          ? out.message
+          : `Spawn mismatch: the plugin found ${found} as the next story but the agent announced ${pending.next}; ` +
+            `start the next story by hand with /epic start ${pending.next}.`;
     } catch (err) {
       text =
         `Spawn failed: ${err instanceof Error ? err.message : String(err)}. ` +
-        `Start the next story by hand with /epic start ${pending.story}.`;
+        `Start the next story by hand with /epic start ${pending.next}.`;
     }
     try {
       await paseo.agents.ref(event.agent.id).send(text);

@@ -43835,6 +43835,7 @@ var OPEN_ROW = ["planned", "in_progress"];
 var HANDOFF_HEADINGS = ["## 1.", "## 2.", "## 3.", "## 4.", "## 5."];
 var EPIC_ID_RE = /^E\d+$/;
 var STORY_ID_RE = /^[A-Z]{2,}-\d+$/;
+var STORY_ID_BODY = STORY_ID_RE.source.slice(1, -1);
 var DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 // server/core/parse.ts
@@ -44246,6 +44247,7 @@ function slugify2(text) {
 }
 
 // server/core/commands.ts
+var STORY_BRANCH_RE = new RegExp(`^(${STORY_ID_BODY})-`);
 var DIRTY2 = "working tree has uncommitted changes; commit or stash them first";
 async function cmdStart(root2, config2, ref, opts = {}) {
   if (!ref) throw new EpicError("start needs an epic id (E20) or a story id (TH-652)");
@@ -44555,7 +44557,7 @@ async function statusDir(root2, config2) {
   const packages = subdirs(base).filter(hasMarkers).map((d) => ({ d, epic: loadLocal(d).epic }));
   if (packages.length === 0) throw new EpicError(`no epic package under ${base}; run init first`);
   const branch = (await runRaw(["git", "rev-parse", "--abbrev-ref", "HEAD"], root2)).stdout.trim();
-  const story2 = branch.startsWith(config2.branchPrefix) ? /^([A-Z]{2,}-\d+)-/.exec(branch.slice(config2.branchPrefix.length))?.[1] : void 0;
+  const story2 = branch.startsWith(config2.branchPrefix) ? STORY_BRANCH_RE.exec(branch.slice(config2.branchPrefix.length))?.[1] : void 0;
   const hit = packages.find(
     ({ epic }) => epicBranch(epic) === branch || story2 !== void 0 && rowOf(epic, story2) !== void 0
   );
@@ -44631,6 +44633,12 @@ function loadConfig(root2) {
 }
 
 // server/core/text.ts
+var PENDING_LINE_RE = new RegExp(
+  `^Spawn pending for (${STORY_ID_BODY}) after (${STORY_ID_BODY}): the plugin starts the successor now\\.$`
+);
+function pendingLine(next, closed) {
+  return `Spawn pending for ${next} after ${closed}: the plugin starts the successor now.`;
+}
 function paragraph(parts) {
   return parts.filter((p) => p.length > 0).join(" ");
 }
@@ -44700,8 +44708,10 @@ if (!root) {
 }
 async function answer(fn) {
   try {
-    const { result, next } = await fn();
-    return { content: [{ type: "text", text: `${JSON.stringify(result, null, 2)}
+    const { first, result, next } = await fn();
+    const head = first ? `${first}
+` : "";
+    return { content: [{ type: "text", text: `${head}${JSON.stringify(result, null, 2)}
 
 ${next}` }] };
   } catch (err) {
@@ -44768,11 +44778,8 @@ server.registerTool(
   },
   ({ story: id }) => answer(async () => {
     const result = await cmdNext(root, loadConfig(root), id, {});
-    const lines = [afterNext(result, "pending")];
-    if (result.next !== null) {
-      lines.push(`Spawn pending for ${result.next.story}: the plugin starts the successor now.`);
-    }
-    return { result, next: lines.join("\n") };
+    const first = result.next === null ? void 0 : pendingLine(result.next.story, result.closed.story);
+    return { first, result, next: afterNext(result, "pending") };
   })
 );
 server.registerTool(

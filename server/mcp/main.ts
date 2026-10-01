@@ -3,7 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { closeProblems, cmdCheck, cmdClose, cmdNext, cmdStart, cmdStatus } from "../core/commands";
 import { loadConfig } from "../core/config";
-import { afterClose, afterCloseCheck, afterNext, afterStart } from "../core/text";
+import { afterClose, afterCloseCheck, afterNext, afterStart, pendingLine } from "../core/text";
 import { EpicError } from "../core/types";
 
 // The stdio MCP server the create hook gives every agent in an epic repo.
@@ -18,13 +18,15 @@ if (!root) {
 type ToolAnswer = { content: Array<{ type: "text"; text: string }>; isError?: boolean };
 
 /**
- * Run a tool: the result as pretty JSON, a blank line, then what to do now.
- * A refusal comes back as an error result with its message, never thrown.
+ * Run a tool: an optional first line, the result as pretty JSON, a blank
+ * line, then what to do now. A refusal comes back as an error result with
+ * its message, never thrown.
  */
-async function answer(fn: () => Promise<{ result: unknown; next: string }>): Promise<ToolAnswer> {
+async function answer(fn: () => Promise<{ first?: string; result: unknown; next: string }>): Promise<ToolAnswer> {
   try {
-    const { result, next } = await fn();
-    return { content: [{ type: "text", text: `${JSON.stringify(result, null, 2)}\n\n${next}` }] };
+    const { first, result, next } = await fn();
+    const head = first ? `${first}\n` : "";
+    return { content: [{ type: "text", text: `${head}${JSON.stringify(result, null, 2)}\n\n${next}` }] };
   } catch (err) {
     if (err instanceof EpicError) return { content: [{ type: "text", text: err.message }], isError: true };
     throw err;
@@ -104,11 +106,9 @@ server.registerTool(
   ({ story: id }) =>
     answer(async () => {
       const result = await cmdNext(root, loadConfig(root), id, {});
-      const lines = [afterNext(result, "pending")];
-      if (result.next !== null) {
-        lines.push(`Spawn pending for ${result.next.story}: the plugin starts the successor now.`);
-      }
-      return { result, next: lines.join("\n") };
+      // The pending line comes first, on its own line: the turn-ended hook reads it there.
+      const first = result.next === null ? undefined : pendingLine(result.next.story, result.closed.story);
+      return { first, result, next: afterNext(result, "pending") };
     }),
 );
 

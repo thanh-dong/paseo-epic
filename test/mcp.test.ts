@@ -1,9 +1,12 @@
 import { execFileSync } from "node:child_process";
+import { mkdirSync, symlinkSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { beforeAll, expect, test } from "vitest";
-import { RemoteFixture } from "./fixtures";
+import { pendingLine } from "../server/core/text";
+import { git, RemoteFixture } from "./fixtures";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 
@@ -48,6 +51,47 @@ test("mcp server lists tools and answers epic_check", async () => {
       expect(Object.keys(parsed)).toEqual(["problems"]);
       expect(parsed.problems).toContain("EPIC.md: TH-901 row is `planned`, expected `implemented`");
       expect(next).toContain("call epic_close_check again");
+    } finally {
+      await client.close();
+    }
+  } finally {
+    fx.teardown();
+  }
+});
+
+/** A PATH holding only git, so the server finds no `gh` and reads no PRs. */
+function gitOnlyEnv(tmp: string): Record<string, string> {
+  const bin = join(tmp, "bin");
+  mkdirSync(bin, { recursive: true });
+  symlinkSync(execFileSync("which", ["git"], { encoding: "utf8" }).trim(), join(bin, "git"));
+  return { HOME: process.env.HOME ?? tmp, PATH: bin, GIT_CONFIG_NOSYSTEM: "1" };
+}
+
+test("epic_next prints the pending line first, then the JSON and what to do", async () => {
+  const fx = new RemoteFixture();
+  try {
+    await fx.setup();
+    const dir = await fx.planAndPush();
+    await fx.close901(dir);
+    await git(fx.root, "push", "-q", "origin", "feat/TH-901-first-thing:epic/E99-test-epic");
+    const client = new Client({ name: "t", version: "0" });
+    await client.connect(
+      new StdioClientTransport({
+        command: process.execPath,
+        args: ["mcp/epic-mcp.mjs", fx.root],
+        cwd: repoRoot,
+        env: gitOnlyEnv(fx.tmp),
+      }),
+    );
+    try {
+      const out = (await client.callTool({ name: "epic_next", arguments: { story: "TH-901" } })) as TextResult;
+      expect(out.isError).toBeFalsy();
+      const text = out.content[0].text;
+      const [first, ...rest] = text.split("\n");
+      expect(first).toBe(pendingLine("TH-902", "TH-901"));
+      const [json, next] = rest.join("\n").split("\n\n");
+      expect(JSON.parse(json).next.story).toBe("TH-902");
+      expect(next).toContain("The plugin is starting the successor now");
     } finally {
       await client.close();
     }

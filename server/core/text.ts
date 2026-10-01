@@ -1,4 +1,23 @@
 import type { NextResult } from "./commands";
+import { STORY_ID_BODY } from "./types";
+
+const PENDING_LINE_RE = new RegExp(
+  `^Spawn pending for (${STORY_ID_BODY}) after (${STORY_ID_BODY}): the plugin starts the successor now\\.$`,
+);
+
+/**
+ * The line `epic_next` prints first when a next story exists. The turn-ended
+ * hook reads it back to know which story to spawn after which closed one.
+ */
+export function pendingLine(next: string, closed: string): string {
+  return `Spawn pending for ${next} after ${closed}: the plugin starts the successor now.`;
+}
+
+/** The two story ids of a whole pending line, or null for any other line. */
+export function parsePendingLine(text: string): { next: string; closed: string } | null {
+  const match = PENDING_LINE_RE.exec(text.trim());
+  return match ? { next: match[1], closed: match[2] } : null;
+}
 
 /** Sentences joined into one paragraph; empty parts are dropped. */
 function paragraph(parts: string[]): string {
