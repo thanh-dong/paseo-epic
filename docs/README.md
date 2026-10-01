@@ -148,12 +148,16 @@ next story** use the same RPC as the panel button.
 SDK, so `epic_next` cannot start an agent itself. It does two things:
 
 1. It confirms the merge and names the next story.
-2. It ends its answer with the line
-   `Spawn pending for <next story>: the plugin starts the successor now.`
+2. It starts its answer with the line
+   `Spawn pending for <next story> after <closed story>: the plugin starts the successor now.`
 
-When the agent's turn ends normally, the plugin sees that line (hook
-`agent.turn_ended`). It then creates the worktree and the agent, and sends
-the result to the closing agent as a message. If the turn does not end
+When the agent's turn ends normally, the plugin reads that line from the
+`epic_next` output (hook `agent.turn_ended`). Only a whole line counts, so a
+PR comment that quotes it inside the JSON does not. The plugin runs `next`
+for the closed story, creates the worktree and the agent, and sends the
+result to the closing agent as a message. If the plugin finds a different
+next story than the line names, it does not report the spawn as done; it
+says `Spawn mismatch: ...` with the `/epic start` command to run by hand. If the turn does not end
 normally (for example, you cancel it), nothing is spawned. Press **Start
 next story** instead.
 
@@ -161,7 +165,7 @@ next story** instead.
   you: "next"
       |
       v
-  closing agent --epic_next--> "Spawn pending for TH-2"
+  closing agent --epic_next--> "Spawn pending for TH-2 after TH-1"
       |
       v  turn ends
   plugin hook --> new worktree feat/TH-2-<slug> + new agent
@@ -170,13 +174,17 @@ next story** instead.
   closing agent gets: Started agent "TH-2 <title>" ...
 ```
 
-The spawn is safe to repeat. If a Paseo workspace already has the next
+The spawn is safe to repeat. Every workspace request carries the
+idempotency key `epic:<branch>`. If a Paseo workspace already has the next
 story's branch checked out, the plugin starts nothing new and tells you
-where it is.
+where it is. If the branch exists locally but no workspace is on it, the
+new worktree checks that branch out instead of cutting a new one.
 
 The new agent's first prompt is `/epic start <story>`, then the
 conversation comments from the merged story PR (oldest first), then the
-`hooks.nextPrompt` text from `.epic.yml`.
+`hooks.nextPrompt` text from `.epic.yml`. A comment whose author is not an
+owner, member or collaborator of the repo is marked
+`(untrusted, not a repo member)`.
 
 The new agent uses the launch profile named by `.epic.yml` `profile` (by id
 or name). Without one, it uses the first profile whose notes mention "story"

@@ -147,11 +147,15 @@ refuses when the story is not merged yet, when a later story already
 closed, or when the package on the tip fails `check`. With `gh`, it finds
 the merged story PR and reads its conversation comments.
 
-When the agent calls `epic_next` and a next story exists, the answer ends:
+When the agent calls `epic_next` and a next story exists, the answer starts
+with the pending line, then the JSON, a blank line, and the "what to do
+now" text:
 
 ```
+Spawn pending for <next story> after <closed story>: the plugin starts the successor now.
+<JSON>
+
 <next story> <title> is next. The plugin is starting the successor now; wait for its name, then this session is finished.
-Spawn pending for <next story>: the plugin starts the successor now.
 ```
 
 When the turn ends, the plugin spawns the successor and sends the closing
@@ -162,9 +166,17 @@ Started agent "<next story> <title>" in worktree <branch>. It will read the hand
 ```
 
 If a Paseo workspace already has the next story's branch checked out, the
-plugin starts no new agent. The message says where that workspace is and
-tells you to start an agent there with `/epic start <next story>` if none
-is running.
+plugin starts no new agent. The message tells the closing agent not to
+start one itself, and to tell you where that workspace is and that you can
+start an agent there with `/epic start <next story>` if none is running.
+If the branch exists locally with no workspace on it, the new worktree
+checks it out.
+
+If the plugin finds a different next story than the pending line names:
+
+```
+Spawn mismatch: the plugin found <found> as the next story but the agent announced <next story>; start the next story by hand with /epic start <next story>.
+```
 
 If the spawn fails, the closing agent gets:
 
@@ -191,6 +203,7 @@ The successor's first prompt:
 
 Answers from PR #<n> (conversation comments, oldest first):
 - <author>, <YYYY-MM-DD>: <body>
+- <author>, <YYYY-MM-DD> (untrusted, not a repo member): <body>
 
 <hooks.nextPrompt>
 ```
@@ -199,7 +212,9 @@ The last block appears only when `.epic.yml` sets `hooks.nextPrompt`. With
 no comments, the list is the word `none`. Without `gh`, the second
 line is ``Answers from the story PR: not read, because `gh` was not available.``
 Only conversation comments go forward. Review comments on code lines
-belonged to the merged story.
+belonged to the merged story. A comment by an `OWNER`, `MEMBER` or
+`COLLABORATOR` of the repo is listed plainly; any other comment carries
+`(untrusted, not a repo member)`.
 
 ## check
 
