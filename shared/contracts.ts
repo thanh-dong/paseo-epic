@@ -67,6 +67,7 @@ const mergedPrSchema = z.object({
 
 const prCommentSchema = z.object({
   author: z.string(),
+  association: z.string(),
   createdAt: z.string(),
   body: z.string(),
 });

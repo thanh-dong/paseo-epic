@@ -100,6 +100,9 @@ export function afterNext(result: NextResult, spawned: { title: string } | null 
   ]);
 }
 
+/** Comment authors whose answers the next agent may act on; anyone else is marked untrusted. */
+const TRUSTED: readonly string[] = ["OWNER", "MEMBER", "COLLABORATOR"];
+
 /** The first prompt of the next story's agent (spec section 8). */
 export function nextPrompt(result: NextResult, extra?: string): string {
   if (result.next === null) throw new Error(`${result.epic} has no next story to prompt`);
@@ -111,7 +114,8 @@ export function nextPrompt(result: NextResult, extra?: string): string {
     lines.push(`Answers from PR #${pr.number} (conversation comments, oldest first):`);
     if (comments.length === 0) lines.push("none");
     for (const c of comments) {
-      lines.push(`- ${c.author}, ${c.createdAt.slice(0, 10)}: ${c.body.trim().split("\n").join("\n  ")}`);
+      const mark = TRUSTED.includes(c.association) ? "" : " (untrusted, not a repo member)";
+      lines.push(`- ${c.author}, ${c.createdAt.slice(0, 10)}${mark}: ${c.body.trim().split("\n").join("\n  ")}`);
     }
   }
   if (extra) lines.push("", extra);

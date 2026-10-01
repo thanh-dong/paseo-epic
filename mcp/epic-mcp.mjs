@@ -44162,7 +44162,12 @@ async function ghMergedPrs(root2, base) {
 async function ghPrComments(root2, number4) {
   const out = await run(["gh", "pr", "view", String(number4), "--json", "comments"], root2);
   const raw = JSON.parse(out || "{}").comments ?? [];
-  return raw.map((c) => ({ author: c.author?.login ?? "", createdAt: c.createdAt ?? "", body: c.body ?? "" }));
+  return raw.map((c) => ({
+    author: c.author?.login ?? "",
+    association: c.authorAssociation ?? "",
+    createdAt: c.createdAt ?? "",
+    body: c.body ?? ""
+  }));
 }
 
 // server/core/locate.ts

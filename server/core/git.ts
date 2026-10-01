@@ -91,6 +91,8 @@ export async function ghMergedPrs(root: string, base: string): Promise<MergedPr[
 
 export interface PrComment {
   author: string;
+  /** GitHub's authorAssociation: OWNER, MEMBER, COLLABORATOR, CONTRIBUTOR, NONE, ... */
+  association: string;
   createdAt: string;
   body: string;
 }
@@ -98,7 +100,12 @@ export interface PrComment {
 /** The conversation comments of PR `number`, author flattened to the login. */
 export async function ghPrComments(root: string, number: number): Promise<PrComment[]> {
   const out = await run(["gh", "pr", "view", String(number), "--json", "comments"], root);
-  const raw: Array<{ author?: { login?: string }; createdAt?: string; body?: string }> =
+  const raw: Array<{ author?: { login?: string }; authorAssociation?: string; createdAt?: string; body?: string }> =
     JSON.parse(out || "{}").comments ?? [];
-  return raw.map((c) => ({ author: c.author?.login ?? "", createdAt: c.createdAt ?? "", body: c.body ?? "" }));
+  return raw.map((c) => ({
+    author: c.author?.login ?? "",
+    association: c.authorAssociation ?? "",
+    createdAt: c.createdAt ?? "",
+    body: c.body ?? "",
+  }));
 }

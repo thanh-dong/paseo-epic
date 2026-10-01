@@ -26,7 +26,9 @@ const nextResult: NextResult = {
       mergedAt: "2026-10-01T09:00:00Z",
       title: "TH-901: First thing",
     },
-    comments: [{ author: "lead", createdAt: "2026-10-01T08:30:00Z", body: "Q1: keep the old flag." }],
+    comments: [
+      { author: "lead", association: "OWNER", createdAt: "2026-10-01T08:30:00Z", body: "Q1: keep the old flag." },
+    ],
   },
   next: {
     story: "TH-902",
