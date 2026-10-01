@@ -81,8 +81,9 @@ a global upgrade. Run the 0.10.2 CLI through `npx`:
 npx -y @getpaseo/cli@0.10.2 plugin install github:<owner>/paseo-epic
 ```
 
-On install, Paseo runs the build steps from `paseo-plugin.json`:
-`npm ci`, then `npm run build:mcp`.
+For a GitHub install, Paseo runs the build steps from `paseo-plugin.json`:
+`npm ci`, then `npm run build:mcp`. The built MCP server
+(`mcp/epic-mcp.mjs`) is also committed, so a local clone works as is.
 
 The MCP server runs under plain `node`. The plugin uses `PASEO_EPIC_NODE`
 when it is set in the daemon's environment, else `node` on `PATH`, else the
