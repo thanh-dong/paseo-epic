@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { checkPackage } from "../server/core/check";
 import {
+  closeProblems,
   cmdClose,
   cmdInit,
   cmdNext,
@@ -102,6 +103,10 @@ test("closeChecksThenCommitsTheEpicFolder", async () => {
 
   // Agent updates the package: row, ledger, handoff.
   fx.mark901Done(d);
+  // closeProblems renders in memory: the stale Status block passes, and EPIC.md stays as it was.
+  const onDisk = readFileSync(join(d, "EPIC.md"), "utf8");
+  expect(await closeProblems(fx.root, cfg, "TH-901")).toEqual([]);
+  expect(readFileSync(join(d, "EPIC.md"), "utf8")).toBe(onDisk);
 
   const r = await cmdClose(fx.root, cfg, "TH-901", { noPr: true, noGh: true });
   expect(r.committed).toBe(true);
@@ -267,9 +272,56 @@ test("statusReportsRowsAndNext", async () => {
 });
 
 test("statusWithoutTheEpicBranchOnTheRemote", async () => {
-  await expect(cmdStatus(fx.root, cfg)).rejects.toThrow("no epic package");
+  await expect(cmdStatus(fx.root, cfg)).rejects.toThrow("no epic package under");
   await cmdInit(fx.root, cfg, "E99", "Test epic", { noGit: true });
   const s = await cmdStatus(fx.root, cfg, "E99");
   expect(s.behind).toBeNull();
   expect(s.openPr).toBeNull();
+});
+
+/** Init `id` without git on the current branch with one story row; `closed` drops it so the State renders closed. */
+async function initPackage(id: string, closed: boolean): Promise<void> {
+  const { dir } = await cmdInit(fx.root, cfg, id, `Epic ${id}`, { noGit: true });
+  const f = join(dir, "EPIC.md");
+  writeFileSync(
+    f,
+    readFileSync(f, "utf8").replace(
+      "| TH-NNN Story title | What it builds, in one or two sentences. | normal | planned | |",
+      `| TH-9${id.slice(1)} Only thing | Builds it. | normal | ${closed ? "dropped" : "planned"} | |`,
+    ),
+  );
+  await cmdRender(fx.root, cfg, id);
+  expect(loadLocal(dir).epic.status.State).toBe(closed ? "closed" : "planned");
+}
+
+test("statusOnMainPicksTheOpenEpicOverAClosedOne", async () => {
+  await initPackage("E97", false);
+  await initPackage("E98", true);
+  expect(await currentBranch(fx.root)).toBe("main");
+  expect((await cmdStatus(fx.root, cfg)).epic).toBe("E97");
+});
+
+test("statusOnMainPicksTheHigherOfTwoOpenEpics", async () => {
+  await initPackage("E9", false);
+  await initPackage("E10", false);
+  expect((await cmdStatus(fx.root, cfg)).epic).toBe("E10");
+});
+
+test("closeOfTheLastStoryListsTheDraftEpicPrIntoTheBaseBranch", async () => {
+  const d = await fx.planAndPush();
+  await cmdStart(fx.root, cfg, "TH-901", { noGh: true });
+  fx.mark901Done(d);
+  const f = join(d, "EPIC.md");
+  writeFileSync(
+    f,
+    readFileSync(f, "utf8")
+      .replace("| normal | planned | |", "| normal | dropped | |")
+      .replace("| high-risk | planned | |", "| high-risk | dropped | |"),
+  );
+  const h = join(d, "HANDOFF.md");
+  writeFileSync(h, readFileSync(h, "utf8").replace("next=TH-902", "next=none"));
+  const r = await cmdClose(fx.root, { ...cfg, baseBranch: "develop" }, "TH-901", { noGh: true });
+  expect(r.pushed).toBe(true);
+  expect(r.manual).toHaveLength(2);
+  expect(r.manual[1]).toContain("gh pr create --draft --base develop --head epic/E99-test-epic");
 });

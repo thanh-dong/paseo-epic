@@ -342,7 +342,10 @@ export async function cmdClose(
   requireStoryId(story);
   const branch = await currentBranch(root);
   if (!branch.includes(story)) {
-    throw new EpicError(`current branch \`${branch}\` is not the story branch for ${story}`);
+    throw new EpicError(
+      `current branch \`${branch}\` is not the story branch for ${story}; ` +
+        `check out \`${config.branchPrefix}${story}-…\` and run close again`,
+    );
   }
   const d = findEpicDir(root, config, story);
   const before = loadLocal(d).epic;
@@ -439,13 +442,18 @@ export async function cmdNext(
   const d = findEpicDir(root, config, story);
   const branch = epicBranch(loadLocal(d).epic);
   await run(["git", "fetch", "origin", "--prune"], root);
-  if (!(await remoteBranchExists(root, branch))) throw new EpicError(`origin/${branch} does not exist`);
+  if (!(await remoteBranchExists(root, branch))) {
+    throw new EpicError(`origin/${branch} does not exist; push the epic branch first`);
+  }
 
   // Merged means: the close commit (ledger entry + handoff) is on the epic tip.
   const { epic, handoff } = await loadFromRef(root, d, `origin/${branch}`);
   const problems = checkPackage(epic, handoff);
   if (problems.length > 0) {
-    throw new EpicError(`the package on origin/${branch} does not pass check:\n  - ${problems.join("\n  - ")}`);
+    throw new EpicError(
+      `the package on origin/${branch} does not pass check; fix the listed problems on the epic branch, ` +
+        `then run next again:\n  - ${problems.join("\n  - ")}`,
+    );
   }
   const ledgerIds = epic.ledger.map((l) => l.id);
   const last = ledgerIds.at(-1) ?? "none";
@@ -466,7 +474,9 @@ export async function cmdNext(
   if (!opts.noGh && (await ghAvailable())) {
     pr = pickMergedPr(await ghMergedPrs(root, branch), story, config.branchPrefix);
     if (pr === null) {
-      throw new EpicError(`no merged PR into ${branch} has a \`${config.branchPrefix}${story}-*\` head`);
+      throw new EpicError(
+        `no merged PR into ${branch} has a \`${config.branchPrefix}${story}-*\` head; merge the story PR first`,
+      );
     }
     comments = await ghPrComments(root, pr.number);
   }
@@ -488,26 +498,33 @@ export async function cmdNext(
   return out;
 }
 
+/** The number in the package folder's epic id (E20 -> 20), for picking the newest. */
+function epicNumber(dir: string): number {
+  return Number(basename(dir).split("-")[0].slice(1)) || 0;
+}
+
 /**
- * The package for `status` without a ref: the one whose epic branch is checked
- * out or whose story list holds the checked-out story, else the only one.
+ * The package for `status` without a ref, never ambiguous: the one whose epic
+ * branch is checked out or whose story list holds the checked-out story; else
+ * the newest package that is not closed; else the newest package.
  */
 async function statusDir(root: string, config: EpicConfig): Promise<string> {
   const base = epicsDir(root, config);
-  const marked = subdirs(base).filter(hasMarkers);
-  if (marked.length === 0) throw new EpicError(`no epic package under ${base}`);
+  const packages = subdirs(base)
+    .filter(hasMarkers)
+    .map((d) => ({ d, epic: loadLocal(d).epic }));
+  if (packages.length === 0) throw new EpicError(`no epic package under ${base}; run init first`);
   const branch = (await runRaw(["git", "rev-parse", "--abbrev-ref", "HEAD"], root)).stdout.trim();
   const story = branch.startsWith(config.branchPrefix)
     ? /^([A-Z]{2,}-\d+)-/.exec(branch.slice(config.branchPrefix.length))?.[1]
     : undefined;
-  const hit = marked.find((d) => {
-    const { epic } = loadLocal(d);
-    return epicBranch(epic) === branch || (story !== undefined && rowOf(epic, story) !== undefined);
-  });
-  if (hit) return hit;
-  if (marked.length === 1) return marked[0];
-  const names = marked.map((d) => basename(d)).join(", ");
-  throw new EpicError(`more than one epic package under ${base}; name one: ${names}`);
+  const hit = packages.find(
+    ({ epic }) => epicBranch(epic) === branch || (story !== undefined && rowOf(epic, story) !== undefined),
+  );
+  if (hit) return hit.d;
+  const open = packages.filter(({ epic }) => epic.status.State !== "closed");
+  const pool = open.length > 0 ? open : packages;
+  return pool.reduce((a, b) => (epicNumber(b.d) > epicNumber(a.d) ? b : a)).d;
 }
 
 /**
