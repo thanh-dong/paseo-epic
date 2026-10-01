@@ -58,15 +58,16 @@ export async function cmdInit(
     }
   }
   mkdirSync(d, { recursive: true });
+  // Function replacements, so `$` in the title is written as typed.
   const epicText = templateText(root, config, "epic.md")
-    .replaceAll("ENN-slug", name)
-    .replaceAll("# ENN — Epic title", `# ${epicId} — ${title}`)
-    .replaceAll("ENN", epicId);
+    .replaceAll("ENN-slug", () => name)
+    .replaceAll("# ENN — Epic title", () => `# ${epicId} — ${title}`)
+    .replaceAll("ENN", () => epicId);
   const handoffText = templateText(root, config, "handoff.md")
-    .replaceAll("ENN-slug", name)
-    .replaceAll("ENN — Epic title", `${epicId} — ${title}`)
-    .replaceAll("ENN", epicId)
-    .replaceAll("written=YYYY-MM-DD", `written=${today()}`);
+    .replaceAll("ENN-slug", () => name)
+    .replaceAll("ENN — Epic title", () => `${epicId} — ${title}`)
+    .replaceAll("ENN", () => epicId)
+    .replaceAll("written=YYYY-MM-DD", () => `written=${today()}`);
   writeFileSync(epicFile, epicText);
   writeFileSync(join(d, "HANDOFF.md"), handoffText);
   return { dir: d, branch };

@@ -21,7 +21,8 @@ export async function runRaw(cmd: string[], cwd: string): Promise<RunResult> {
     return {
       code: typeof e.code === "number" ? e.code : 1,
       stdout: e.stdout ?? "",
-      stderr: e.stderr || e.message,
+      // stderr is undefined only when the process never ran (e.g. ENOENT).
+      stderr: e.stderr ?? e.message,
     };
   }
 }

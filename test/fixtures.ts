@@ -12,6 +12,10 @@ import { today } from "../server/core/slug";
 
 const execFileP = promisify(execFile);
 
+// Every git call in the test process, including the ones the commands make,
+// ignores the machine's system git config.
+process.env.GIT_CONFIG_NOSYSTEM ??= "1";
+
 const TEMPLATES = fileURLToPath(new URL("../templates", import.meta.url));
 
 export const TODAY = today();

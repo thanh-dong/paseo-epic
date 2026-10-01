@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { cmdInit, cmdStart } from "../server/core/commands";
 import { type EpicConfig, loadConfig } from "../server/core/config";
-import { currentBranch } from "../server/core/git";
+import { currentBranch, run } from "../server/core/git";
 import { git, RemoteFixture } from "./fixtures";
 
 let fx: RemoteFixture;
@@ -58,4 +58,16 @@ test("startRefusesMissingRemoteBranch", async () => {
   await expect(cmdStart(fx.root, cfg, "E99", { dryRun: true, noGh: true })).rejects.toThrow(
     "does not exist",
   );
+});
+
+test("runReportsStdoutWhenStderrIsEmpty", async () => {
+  await expect(
+    run([process.execPath, "-e", "process.stdout.write('why'); process.exit(1)"], fx.root),
+  ).rejects.toThrow("failed:\nwhy");
+});
+
+test("initWritesDollarSignsInTheTitleVerbatim", async () => {
+  const { dir } = await cmdInit(fx.root, cfg, "E98", "Cut $$ costs", { noGit: true });
+  expect(readFileSync(join(dir, "EPIC.md"), "utf8")).toContain("# E98 — Cut $$ costs");
+  expect(readFileSync(join(dir, "HANDOFF.md"), "utf8")).toContain("E98 — Cut $$ costs");
 });
