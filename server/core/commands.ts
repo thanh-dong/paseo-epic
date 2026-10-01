@@ -127,7 +127,10 @@ export async function cmdStart(
   const { epic, handoff } = await loadFromRef(root, d, `origin/${branch}`);
   const problems = checkPackage(epic, handoff);
   if (problems.length > 0) {
-    throw new EpicError(`the package on origin/${branch} does not pass check:\n  - ${problems.join("\n  - ")}`);
+    throw new EpicError(
+      `the package on origin/${branch} does not pass check; fix the listed problems on the epic branch, ` +
+        `then run start again:\n  - ${problems.join("\n  - ")}`,
+    );
   }
   const story = expectedNext(epic);
   if (story === "none") throw new EpicError(`${epic.id} has no open story (State ${epic.status.State})`);
@@ -508,7 +511,7 @@ function epicNumber(dir: string): number {
  * branch is checked out or whose story list holds the checked-out story; else
  * the newest package that is not closed; else the newest package.
  */
-async function statusDir(root: string, config: EpicConfig): Promise<string> {
+export async function statusDir(root: string, config: EpicConfig): Promise<string> {
   const base = epicsDir(root, config);
   const packages = subdirs(base)
     .filter(hasMarkers)

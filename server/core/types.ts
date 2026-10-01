@@ -1,3 +1,5 @@
+import type { NextResult } from "./commands";
+
 /** A refusal with a message for the human. */
 export class EpicError extends Error {
   constructor(message: string) {
@@ -50,3 +52,12 @@ export interface Handoff {
   next: string;
   written: string;
 }
+
+/** The agent the `next` spawn started (or found) for the next story. */
+export type Spawned = { workspaceId: string; agentId: string; title: string };
+
+/** Run `next` for the closed story and start the next story's agent; shared by the RPC and the turn-ended hook. */
+export type SpawnNext = (input: {
+  root: string;
+  story?: string;
+}) => Promise<NextResult & { spawned: Spawned | null; message: string }>;
