@@ -14,10 +14,19 @@ export function buildMcpConfig(
   return env ? { ...config, env } : config;
 }
 
+/** Detection failures already logged, so each distinct message is logged once. */
+const reported = new Set<string>();
+
+function reportOnce(message: string): void {
+  if (reported.has(message)) return;
+  reported.add(message);
+  console.error(message);
+}
+
 /**
  * The `before agent.create` transform: add the `epic` MCP server when the
  * agent's repo is in an epic. Returns `undefined` (leave the request as is)
- * otherwise.
+ * otherwise, including when detection throws (logged once per message).
  */
 export function injectEpicMcp(
   request: { config: AgentSessionConfig; env?: Record<string, string> },
@@ -29,8 +38,15 @@ export function injectEpicMcp(
     repoRoot: (cwd: string) => string;
   },
 ): typeof request | undefined {
-  const root = opts.repoRoot(request.config.cwd);
-  if (!opts.isEpicRepo(root)) return undefined;
+  let root: string;
+  try {
+    root = opts.repoRoot(request.config.cwd);
+    if (!opts.isEpicRepo(root)) return undefined;
+  } catch (err) {
+    // The hook never throws into the daemon: a failed detection means "not an epic repo".
+    reportOnce(`paseo-epic: epic detection failed for ${request.config.cwd}: ${err instanceof Error ? err.message : String(err)}`);
+    return undefined;
+  }
   return {
     ...request,
     config: {

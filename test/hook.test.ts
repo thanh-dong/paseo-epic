@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { resolveNodePath } from "../index.server";
 import { loadConfig } from "../server/core/config";
 import { isEpicRepo } from "../server/core/locate";
@@ -102,4 +102,39 @@ afterEach(() => {
 test("resolveNodePath prefers PASEO_EPIC_NODE", () => {
   process.env.PASEO_EPIC_NODE = "/opt/node22/bin/node";
   expect(resolveNodePath()).toEqual({ command: "/opt/node22/bin/node" });
+});
+
+test("a throwing detection leaves the request alone and is logged once", () => {
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const failing = {
+      ...opts,
+      isEpicRepo: (): boolean => {
+        throw new Error("EACCES: permission denied, scandir '/wt/docs/stories/epics'");
+      },
+    };
+    const req = { config: { provider: "claude", cwd: "/wt" } };
+    expect(injectEpicMcp(req, failing)).toBeUndefined();
+    expect(injectEpicMcp(req, failing)).toBeUndefined();
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(String(log.mock.calls[0][0])).toContain("EACCES");
+  } finally {
+    log.mockRestore();
+  }
+});
+
+test("a throwing repoRoot leaves the request alone", () => {
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const failing = {
+      ...opts,
+      repoRoot: (): string => {
+        throw new Error("spawnSync git ETIMEDOUT");
+      },
+    };
+    expect(injectEpicMcp({ config: { provider: "claude", cwd: "/slow" } }, failing)).toBeUndefined();
+    expect(log).toHaveBeenCalledTimes(1);
+  } finally {
+    log.mockRestore();
+  }
 });

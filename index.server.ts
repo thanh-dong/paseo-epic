@@ -9,7 +9,12 @@ import { registerHandlers, spawnNext } from "./server/rpc/handlers";
 /** The git top level of `cwd`, or `cwd` itself when git cannot tell. */
 function repoRoot(cwd: string): string {
   try {
-    return execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd, encoding: "utf8" }).trim();
+    return execFileSync("git", ["rev-parse", "--show-toplevel"], {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 5000,
+    }).trim();
   } catch {
     return cwd;
   }
@@ -34,23 +39,12 @@ export function resolveNodePath(): { command: string; env?: Record<string, strin
   return { command: process.execPath, env: { ELECTRON_RUN_AS_NODE: "1" } };
 }
 
-/** Bad `.epic.yml` messages already logged, so each is logged once. */
-const reported = new Set<string>();
-
-/** Epic detection for the create hook; a repo with a bad `.epic.yml` is not an epic repo. */
+/**
+ * Epic detection for the create hook. Any throw (a bad `.epic.yml`, an
+ * unreadable epics folder) is caught and logged by `injectEpicMcp`.
+ */
 function detectEpic(root: string): boolean {
-  let config: ReturnType<typeof loadConfig>;
-  try {
-    config = loadConfig(root);
-  } catch (err) {
-    const message = `paseo-epic: ${root}: ${(err as Error).message}`;
-    if (!reported.has(message)) {
-      reported.add(message);
-      console.error(message);
-    }
-    return false;
-  }
-  return isEpicRepo(root, config);
+  return isEpicRepo(root, loadConfig(root));
 }
 
 export default function contribute(server: PluginServerContext) {
