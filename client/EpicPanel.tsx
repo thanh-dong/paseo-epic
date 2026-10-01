@@ -1,18 +1,16 @@
 import { type PluginWorkspacePanelProps, useRpc, useWorkspace } from "@getpaseo/plugin/client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
-import type { output as ZodOutput } from "zod";
 import { checkRpc, isEpicRpc, nextRpc, statusRpc } from "../shared/contracts";
-import { errorText, onResult, type PanelResult, takeResult } from "./results";
+import { errorText, onResult, type PanelResult, type Status, takeResult } from "./results";
 import { labels } from "./strings";
 
-type StatusContract = typeof statusRpc;
-type Status = ZodOutput<StatusContract["output"]>;
-
-interface PanelState extends PanelResult {
+interface PanelState extends Omit<PanelResult, "ref"> {
   phase: "loading" | "no-epic" | "ready" | "error";
-  status?: Status;
 }
+
+/** The epic or story id status is read for; null reads the default package. */
+type EpicRef = string | null;
 
 const COLUMN_WIDTHS = { story: 220, lane: 90, status: 110 } as const;
 
@@ -36,41 +34,55 @@ function useStyles(theme: PluginWorkspacePanelProps["theme"], compact: boolean) 
       button: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, backgroundColor: theme.colors.accent },
       buttonText: { color: theme.colors.accentForeground, textAlign: "center" as const },
       result: { gap: 4 },
+      link: { color: theme.colors.foreground, textDecorationLine: "underline" as const },
     }),
     [theme, compact],
   );
 }
 
-export function EpicPanel({ theme, layout, workspaceId }: PluginWorkspacePanelProps) {
+export function EpicPanel({ theme, layout, workspaceId, navigation }: PluginWorkspacePanelProps) {
   const dir = useWorkspace(workspaceId, (w) => w.directory);
   const styles = useStyles(theme, layout.compact);
   const [state, setState] = useState<PanelState>({ phase: "loading" });
   const [busy, setBusy] = useState(false);
 
-  // useRpc may return a new function on each render; keep the latest in a ref
-  // so the effects depend on the directory only.
-  const rpc = { isEpic: useRpc(isEpicRpc), status: useRpc(statusRpc), check: useRpc(checkRpc), next: useRpc(nextRpc) };
-  const rpcRef = useRef(rpc);
-  rpcRef.current = rpc;
+  const isEpic = useRpc(isEpicRpc);
+  const readStatus = useRpc(statusRpc);
+  const check = useRpc(checkRpc);
+  const next = useRpc(nextRpc);
+  const epicRef = useRef<EpicRef>(null);
+  // Loads can overlap (a command result while a button's load runs); only the
+  // newest one may set the state.
+  const loadSeq = useRef(0);
 
-  /** Read isEpic then status, and show `result` beside the fresh status. */
+  /** Show `result` beside the status it carries, or a fresh isEpic + status read. */
   const load = useCallback(
     async (result: PanelResult = {}) => {
       if (!dir) return;
-      const { isEpic, status } = rpcRef.current;
+      const { ref, status: carried, ...shown } = result;
+      if (ref !== undefined) epicRef.current = ref;
+      const seq = ++loadSeq.current;
+      const settle = (s: PanelState) => {
+        if (seq === loadSeq.current) setState(s);
+      };
+      if (carried) {
+        settle({ phase: "ready", status: carried, ...shown });
+        return;
+      }
+      const statusRef = epicRef.current ?? undefined;
       try {
         const { epic } = await isEpic({ workspaceDir: dir });
         if (!epic) {
-          setState({ phase: "no-epic", ...result });
+          settle({ phase: "no-epic", ...shown });
           return;
         }
-        setState({ phase: "ready", status: await status({ workspaceDir: dir }), ...result });
+        settle({ phase: "ready", status: await readStatus({ workspaceDir: dir, ref: statusRef }), ...shown });
       } catch (err) {
-        const error = [...new Set([result.error, errorText(err)].filter(Boolean))].join("\n\n");
-        setState({ phase: "error", ...result, error });
+        const error = [...new Set([shown.error, errorText(err)].filter(Boolean))].join("\n\n");
+        settle({ phase: "error", ...shown, error });
       }
     },
-    [dir],
+    [dir, isEpic, readStatus],
   );
 
   useEffect(() => {
@@ -99,11 +111,11 @@ export function EpicPanel({ theme, layout, workspaceId }: PluginWorkspacePanelPr
 
   const onCheck = () =>
     press(async () => {
-      const results = await rpcRef.current.check({ workspaceDir: dir ?? "", ref: state.status?.epic });
+      const results = await check({ workspaceDir: dir ?? "", ref: epicRef.current ?? state.status?.epic });
       return { problems: results.flatMap((r) => r.problems) };
     });
   const onNext = () =>
-    press(async () => ({ message: (await rpcRef.current.next({ workspaceDir: dir ?? "" })).message }));
+    press(async () => ({ message: (await next({ workspaceDir: dir ?? "" })).message }));
 
   if (!dir || state.phase === "loading") {
     return (
@@ -115,6 +127,9 @@ export function EpicPanel({ theme, layout, workspaceId }: PluginWorkspacePanelPr
 
   const { status } = state;
   const problems = state.problems ?? status?.problems;
+  const openPr = status?.openPr;
+  const openBrowser = navigation?.openBrowser;
+  const openPrLink = openPr && openBrowser ? () => openBrowser({ url: openPr.url, workspaceId }) : undefined;
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       {state.phase === "no-epic" ? <Text style={styles.text}>{labels.noEpic}</Text> : null}
@@ -135,8 +150,18 @@ export function EpicPanel({ theme, layout, workspaceId }: PluginWorkspacePanelPr
       ) : null}
       {state.phase === "no-epic" ? null : (
         <View style={styles.actions}>
-          {status?.openPr ? (
-            <Text style={styles.text}>{`Open PR: #${status.openPr.number} (${labels.waitingForMerge})`}</Text>
+          {openPr ? (
+            <View style={styles.line}>
+              <Text style={styles.text}>{`Open PR: #${openPr.number} (${labels.waitingForMerge})`}</Text>
+              <Text
+                selectable
+                accessibilityRole={openPrLink ? "link" : undefined}
+                onPress={openPrLink}
+                style={openPrLink ? styles.link : styles.muted}
+              >
+                {openPr.url}
+              </Text>
+            </View>
           ) : null}
           <ActionButton label={labels.check} busy={busy} onPress={onCheck} styles={styles} />
           <ActionButton label={labels.startNext} busy={busy} onPress={onNext} styles={styles} />

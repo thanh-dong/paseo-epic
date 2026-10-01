@@ -2,7 +2,7 @@ import type { PaseoApi } from "@getpaseo/client";
 import type { PluginClientContext, PluginWorkspaceCommandContext } from "@getpaseo/plugin/client";
 import { checkRpc, initRpc, nextRpc, statusRpc } from "./shared/contracts";
 import { EpicPanel } from "./client/EpicPanel";
-import { errorText, type PanelResult, postResult } from "./client/results";
+import { errorText, folderName, type PanelResult, postResult } from "./client/results";
 import { closeInstructions, noAgent, startInstructions, USAGE } from "./client/strings";
 
 const PANEL_ID = "epic";
@@ -74,7 +74,7 @@ async function onEpicCommand(ctx: PluginWorkspaceCommandContext & { args: string
       if (!id || !title) throw new Error(USAGE);
       return runInPanel(ctx, async () => {
         await ctx.rpc(initRpc, { workspaceDir, epicId: id, title });
-        return {};
+        return { ref: id };
       });
     }
     case "next":
@@ -82,12 +82,13 @@ async function onEpicCommand(ctx: PluginWorkspaceCommandContext & { args: string
     case "check":
       return runInPanel(ctx, async () => {
         const results = await ctx.rpc(checkRpc, { workspaceDir, ref: id });
-        return { problems: results.flatMap((r) => r.problems) };
+        // Without an id every package is checked; name the folder on each problem.
+        const problems = results.flatMap((r) => (id ? r.problems : r.problems.map((p) => `${folderName(r.dir)}: ${p}`)));
+        return { ref: id ?? null, problems };
       });
     case "status":
       return runInPanel(ctx, async () => {
-        await ctx.rpc(statusRpc, { workspaceDir, ref: id });
-        return {};
+        return { ref: id ?? null, status: await ctx.rpc(statusRpc, { workspaceDir, ref: id }) };
       });
     default:
       throw new Error(USAGE);

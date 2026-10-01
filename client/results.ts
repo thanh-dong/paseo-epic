@@ -3,7 +3,21 @@
 // panel; the panel takes the result, re-reads the status, and shows it. The
 // panel may already be open, so it also listens for new posts.
 
+import type { output as ZodOutput } from "zod";
+import type { statusRpc } from "../shared/contracts";
+
+type StatusContract = typeof statusRpc;
+export type Status = ZodOutput<StatusContract["output"]>;
+
 export interface PanelResult {
+  /**
+   * The epic or story id the panel reads status for, kept for later reads and
+   * button presses. `null` goes back to the default package; absent keeps the
+   * current one.
+   */
+  ref?: string | null;
+  /** Status the command already read for `ref`; the panel shows it as is. */
+  status?: Status;
   /** The `next` message. */
   message?: string;
   /** Check problems; an empty list shows "Last check: ok". */
@@ -32,6 +46,11 @@ export function onResult(listener: () => void): () => void {
   return () => {
     listeners.delete(listener);
   };
+}
+
+/** The last path segment of a package folder. */
+export function folderName(dir: string): string {
+  return dir.split(/[\\/]/).filter(Boolean).pop() ?? dir;
 }
 
 /** The text of a thrown RPC error; YAML errors keep their line breaks. */
