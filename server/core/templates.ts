@@ -1,9 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { EpicConfig } from "./config";
+import { DEFAULT_EPIC_TEMPLATE, DEFAULT_HANDOFF_TEMPLATE } from "./default-templates";
 
-const DEFAULT_TEMPLATES = fileURLToPath(new URL("../../templates/", import.meta.url));
+const DEFAULTS = { "epic.md": DEFAULT_EPIC_TEMPLATE, "handoff.md": DEFAULT_HANDOFF_TEMPLATE } as const;
 
 /** The project's override from `config.templates` when it exists, else the shipped default. */
 export function templateText(root: string, config: EpicConfig, name: "epic.md" | "handoff.md"): string {
@@ -11,5 +11,5 @@ export function templateText(root: string, config: EpicConfig, name: "epic.md" |
     const override = join(root, config.templates, name);
     if (existsSync(override)) return readFileSync(override, "utf8");
   }
-  return readFileSync(join(DEFAULT_TEMPLATES, name), "utf8");
+  return DEFAULTS[name];
 }

@@ -1,10 +1,14 @@
 import { execFileSync } from "node:child_process";
-import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { PluginServerContext } from "@getpaseo/plugin/server";
 import { loadConfig } from "./server/core/config";
 import { isEpicRepo } from "./server/core/locate";
 import { injectEpicMcp } from "./server/hooks/inject-mcp";
 import { registerSpawnOnNext } from "./server/hooks/spawn-on-next";
+import { MCP_BUNDLE } from "./server/mcp/bundle.generated";
 import { registerHandlers, spawnNextFor } from "./server/rpc/handlers";
 
 /** The git top level of `cwd`, or `cwd` itself when git cannot tell. */
@@ -41,6 +45,25 @@ export function resolveNodePath(): { command: string; env?: Record<string, strin
 }
 
 /**
+ * The MCP server as a file a real node can run. The daemon loads this module
+ * from a bundle with no plugin directory, so the script ships inside the
+ * bundle as a string and is written once to the temp dir, named by its hash.
+ */
+export function materializeMcpBundle(): string {
+  const hash = createHash("sha256").update(MCP_BUNDLE).digest("hex").slice(0, 12);
+  const dir = join(tmpdir(), "paseo-epic");
+  const file = join(dir, `epic-mcp-${hash}.mjs`);
+  const size = Buffer.byteLength(MCP_BUNDLE);
+  if (existsSync(file) && statSync(file).size === size) return file;
+  mkdirSync(dir, { recursive: true });
+  // Write then rename, so a second daemon never runs a half-written file.
+  const partial = `${file}.${process.pid}.tmp`;
+  writeFileSync(partial, MCP_BUNDLE);
+  renameSync(partial, file);
+  return file;
+}
+
+/**
  * Epic detection for the create hook. Any throw (a bad `.epic.yml`, an
  * unreadable epics folder) is caught and logged by `injectEpicMcp`.
  */
@@ -49,7 +72,7 @@ function detectEpic(root: string): boolean {
 }
 
 export default function contribute(server: PluginServerContext) {
-  const mcpPath = fileURLToPath(new URL("./mcp/epic-mcp.mjs", import.meta.url));
+  const mcpPath = materializeMcpBundle();
   const node = resolveNodePath();
   const removeHook = server.before("agent.create", ({ request }) =>
     injectEpicMcp(request, {

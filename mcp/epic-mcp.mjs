@@ -44245,10 +44245,6 @@ function slugify2(text) {
   return s.slice(0, 48).replace(/-+$/, "") || "story";
 }
 
-// server/core/templates.ts
-import { fileURLToPath } from "node:url";
-var DEFAULT_TEMPLATES = fileURLToPath(new URL("../../templates/", import.meta.url));
-
 // server/core/commands.ts
 var DIRTY2 = "working tree has uncommitted changes; commit or stash them first";
 async function cmdStart(root2, config2, ref, opts = {}) {

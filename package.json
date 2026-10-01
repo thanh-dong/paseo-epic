@@ -13,12 +13,13 @@
     "server/",
     "shared/",
     "mcp/",
-    "templates/"
+    "templates/",
+    "scripts/"
   ],
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "build:mcp": "esbuild server/mcp/main.ts --bundle --platform=node --format=esm --target=node20 --outfile=mcp/epic-mcp.mjs --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\""
+    "build:mcp": "esbuild server/mcp/main.ts --bundle --platform=node --format=esm --target=node20 --outfile=mcp/epic-mcp.mjs --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\" && node scripts/gen-mcp-module.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.31",
