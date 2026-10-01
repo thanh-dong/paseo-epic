@@ -60,4 +60,6 @@ export type Spawned = { workspaceId: string; agentId: string; title: string };
 export type SpawnNext = (input: {
   root: string;
   story?: string;
+  /** Epic or story id naming the package whose last closed story `next` runs for, when `story` is absent. */
+  ref?: string;
 }) => Promise<NextResult & { spawned: Spawned | null; message: string }>;

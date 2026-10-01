@@ -86,6 +86,8 @@ export function EpicPanel({ theme, layout, workspaceId, navigation }: PluginWork
   );
 
   useEffect(() => {
+    // A reused panel instance never carries a ref across workspaces.
+    epicRef.current = null;
     if (!dir) return;
     void load(takeResult(dir));
     return onResult(() => {
@@ -115,7 +117,7 @@ export function EpicPanel({ theme, layout, workspaceId, navigation }: PluginWork
       return { problems: results.flatMap((r) => r.problems) };
     });
   const onNext = () =>
-    press(async () => ({ message: (await next({ workspaceDir: dir ?? "" })).message }));
+    press(async () => ({ message: (await next({ workspaceDir: dir ?? "", ref: epicRef.current ?? undefined })).message }));
 
   if (!dir || state.phase === "loading") {
     return (

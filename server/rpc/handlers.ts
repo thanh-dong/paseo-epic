@@ -72,8 +72,8 @@ export function registerHandlers(
   server.handle(closeRpc, ({ workspaceDir, story }) =>
     refusalsAsErrors(() => cmdClose(workspaceDir, loadConfig(workspaceDir), story)),
   );
-  server.handle(nextRpc, ({ workspaceDir, story }, { paseo }) =>
-    refusalsAsErrors(() => deps.spawnNextFor(paseo)({ root: workspaceDir, story })),
+  server.handle(nextRpc, ({ workspaceDir, story, ref }, { paseo }) =>
+    refusalsAsErrors(() => deps.spawnNextFor(paseo)({ root: workspaceDir, story, ref })),
   );
   server.handle(isEpicRpc, ({ workspaceDir }) =>
     refusalsAsErrors(() => ({ epic: isEpicRepo(workspaceDir, loadConfig(workspaceDir)) })),

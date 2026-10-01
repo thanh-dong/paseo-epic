@@ -124,7 +124,7 @@ export const closeRpc = defineRpc({
 
 export const nextRpc = defineRpc({
   name: "epic.next",
-  input: z.object({ workspaceDir, story: z.string().optional() }),
+  input: z.object({ workspaceDir, story: z.string().optional(), ref: z.string().optional() }),
   output: nextSpawnResultSchema,
 });
 

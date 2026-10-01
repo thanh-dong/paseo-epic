@@ -2,7 +2,7 @@ import type { PaseoApi } from "@getpaseo/client";
 import { type cmdNext, statusDir } from "../core/commands";
 import type { EpicConfig } from "../core/config";
 import type { localBranchExists } from "../core/git";
-import { loadLocal } from "../core/locate";
+import { findEpicDir, loadLocal } from "../core/locate";
 import { afterNext, nextPrompt } from "../core/text";
 import { EpicError, type SpawnNext } from "../core/types";
 
@@ -21,10 +21,10 @@ type AgentProfile = {
 
 /**
  * The story `next` runs for when none is given: the last ledger entry of the
- * package `status` shows without a ref.
+ * package `status` shows for `ref` (the default package without one).
  */
-export async function lastClosedStory(root: string, config: EpicConfig): Promise<string> {
-  const { epic } = loadLocal(await statusDir(root, config));
+export async function lastClosedStory(root: string, config: EpicConfig, ref?: string): Promise<string> {
+  const { epic } = loadLocal(ref ? findEpicDir(root, config, ref) : await statusDir(root, config));
   const last = epic.ledger.at(-1);
   if (!last) throw new EpicError(`${epic.id} has no closed story yet; close one before running next`);
   return last.id;
@@ -65,9 +65,9 @@ export function createSpawnNext(deps: {
   findWorkspaceByBranch: (branch: string) => Promise<{ id: string; directory: string } | null>;
   localBranchExists: typeof localBranchExists;
 }): SpawnNext {
-  return async ({ root, story }) => {
+  return async ({ root, story, ref }) => {
     const cfg = deps.config(root);
-    const result = await deps.next(root, cfg, story ?? (await lastClosedStory(root, cfg)));
+    const result = await deps.next(root, cfg, story ?? (await lastClosedStory(root, cfg, ref)));
     const next = result.next;
     if (next === null) return { ...result, spawned: null, message: afterNext(result, null) };
 

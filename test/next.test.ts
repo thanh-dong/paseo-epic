@@ -1,13 +1,17 @@
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { PaseoApi } from "@getpaseo/client";
 import type { PluginServerContext } from "@getpaseo/plugin/server";
 import type { AgentTimelineItem } from "@getpaseo/protocol/agent-types";
 import { expect, test } from "vitest";
-import type { NextResult } from "../server/core/commands";
+import { cmdInit, type NextResult } from "../server/core/commands";
 import type { EpicConfig } from "../server/core/config";
 import type { SpawnNext } from "../server/core/types";
 import { pendingNextFromTimeline, registerSpawnOnNext } from "../server/hooks/spawn-on-next";
 import { findWorkspaceByBranch } from "../server/rpc/handlers";
 import { createSpawnNext } from "../server/rpc/next";
+import { makeRoot } from "./fixtures";
 
 const nextResult: NextResult = {
   epic: "E99",
@@ -343,4 +347,36 @@ test("findWorkspaceByBranch pages through workspaces and matches the current bra
   expect(cursors).toEqual([undefined, "c2"]);
   cursors.length = 0;
   expect(await findWorkspaceByBranch(paseo, "feat/none")).toBeNull();
+});
+
+/** Init `id` without git and give it one closed story `story` in the ledger. */
+async function initWithClosedStory(root: string, id: string, story: string): Promise<void> {
+  const { dir } = await cmdInit(root, baseConfig, id, `Epic ${id}`, { noGit: true });
+  const f = join(dir, "EPIC.md");
+  const ledger = `### ${story} — 2026-09-06\n\n- Shipped: it.\n\n## Dependencies`;
+  writeFileSync(f, readFileSync(f, "utf8").replace("## Dependencies", ledger));
+}
+
+test("a ref picks that package's last closed story when a higher package exists", async () => {
+  const root = makeRoot(mkdtempSync(join(tmpdir(), "epic-next-ref-")));
+  try {
+    await initWithClosedStory(root, "E97", "TH-971");
+    await initWithClosedStory(root, "E98", "TH-981");
+    const seen: string[] = [];
+    const spawnNext = createSpawnNext({
+      paseo: fakePaseo().paseo,
+      config: () => baseConfig,
+      next: async (_root, _cfg, story) => {
+        seen.push(story);
+        return { ...nextResult, next: null };
+      },
+      findWorkspaceByBranch: async () => null,
+      localBranchExists: async () => false,
+    });
+    await spawnNext({ root, ref: "E97" });
+    await spawnNext({ root });
+    expect(seen).toEqual(["TH-971", "TH-981"]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
