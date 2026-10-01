@@ -18,7 +18,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "build:mcp": "esbuild server/mcp/main.ts --bundle --platform=node --format=esm --target=node20 --outfile=mcp/epic-mcp.mjs"
+    "build:mcp": "esbuild server/mcp/main.ts --bundle --platform=node --format=esm --target=node20 --outfile=mcp/epic-mcp.mjs --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\""
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.31",
