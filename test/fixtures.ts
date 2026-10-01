@@ -1,9 +1,16 @@
-import { cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { execFile } from "node:child_process";
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseEpic } from "../server/core/parse";
-import { renderStatus } from "../server/core/check";
-import { slugify, today } from "../server/core/slug";
+import { promisify } from "node:util";
+import { expect } from "vitest";
+import { cmdCheck, cmdInit, cmdRender } from "../server/core/commands";
+import { loadConfig } from "../server/core/config";
+import { currentBranch } from "../server/core/git";
+import { today } from "../server/core/slug";
+
+const execFileP = promisify(execFile);
 
 const TEMPLATES = fileURLToPath(new URL("../templates", import.meta.url));
 
@@ -33,38 +40,19 @@ export function makeRoot(tmp: string): string {
   return tmp;
 }
 
-/**
- * Write the E99 package from the templates the way `epic.py init --no-git`
- * does (cmdInit arrives in a later task). Returns the package dir.
- */
-export function initE99(root: string): string {
-  const epicId = "E99";
-  const title = "Test epic";
-  const name = `${epicId}-${slugify(title)}`;
-  const d = join(root, "docs", "stories", "epics", name);
-  mkdirSync(d, { recursive: true });
-  const tpl = join(root, "docs", "templates");
-  const epicText = readFileSync(join(tpl, "epic.md"), "utf8")
-    .replaceAll("ENN-slug", name)
-    .replaceAll("# ENN — Epic title", `# ${epicId} — ${title}`)
-    .replaceAll("ENN", epicId);
-  const handoffText = readFileSync(join(tpl, "handoff.md"), "utf8")
-    .replaceAll("ENN-slug", name)
-    .replaceAll("ENN — Epic title", `${epicId} — ${title}`)
-    .replaceAll("ENN", epicId)
-    .replaceAll("written=YYYY-MM-DD", `written=${today()}`);
-  writeFileSync(join(d, "EPIC.md"), epicText);
-  writeFileSync(join(d, "HANDOFF.md"), handoffText);
-  return d;
+/** Write the E99 package with the real `init`, without git. Returns the package dir. */
+export async function initE99(root: string): Promise<string> {
+  const { dir } = await cmdInit(root, loadConfig(root), "E99", "Test epic", { noGit: true });
+  return dir;
 }
 
 /** Init E99, put rows/ledger/handoff in, render the status. */
-export function fill(
+export async function fill(
   root: string,
   opts: { rows?: string; ledger?: string; after?: string; next?: string } = {},
-): string {
+): Promise<string> {
   const { rows = ROWS, ledger = LEDGER_901, after = "TH-901", next = "TH-902" } = opts;
-  const d = initE99(root);
+  const d = await initE99(root);
   const f = join(d, "EPIC.md");
   const text = readFileSync(f, "utf8")
     .replaceAll(
@@ -72,7 +60,8 @@ export function fill(
       rows,
     )
     .replaceAll("## Dependencies", `${ledger}\n## Dependencies`);
-  writeFileSync(f, renderStatus(parseEpic(f, text)));
+  writeFileSync(f, text);
+  await cmdRender(root, loadConfig(root), "E99");
   const h = join(d, "HANDOFF.md");
   writeFileSync(
     h,
@@ -82,4 +71,63 @@ export function fill(
     ),
   );
   return d;
+}
+
+/** Run git with no system config and no commit signing; returns stdout. */
+export async function git(cwd: string, ...args: string[]): Promise<string> {
+  const { stdout } = await execFileP("git", ["-c", "commit.gpgsign=false", ...args], {
+    cwd,
+    env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1" },
+  });
+  return stdout;
+}
+
+/** A clone of a local bare remote with the templates committed and pushed on main. */
+export class RemoteFixture {
+  tmp = "";
+  remote = "";
+  root = "";
+
+  async setup(): Promise<void> {
+    this.tmp = mkdtempSync(join(tmpdir(), "paseo-epic-git-"));
+    this.remote = join(this.tmp, "remote.git");
+    await git(this.tmp, "init", "--bare", "-q", "-b", "main", this.remote);
+    this.root = join(this.tmp, "clone");
+    await git(this.tmp, "clone", "-q", this.remote, this.root);
+    await git(this.root, "config", "user.email", "t@example.com");
+    await git(this.root, "config", "user.name", "Test");
+    makeRoot(this.root);
+    await git(this.root, "add", "-A");
+    await git(this.root, "commit", "-q", "-m", "templates");
+    await git(this.root, "push", "-q", "-u", "origin", "main");
+  }
+
+  teardown(): void {
+    rmSync(this.tmp, { recursive: true, force: true });
+  }
+
+  /** Init E99 on its epic branch, plan three stories, check, commit and push. Returns the package dir. */
+  async planAndPush(): Promise<string> {
+    const cfg = loadConfig(this.root);
+    const { dir } = await cmdInit(this.root, cfg, "E99", "Test epic", { fromRef: "origin/main" });
+    expect(await currentBranch(this.root)).toBe("epic/E99-test-epic");
+    const f = join(dir, "EPIC.md");
+    const rows = ROWS.replace("| implemented | 2026-09-06 PR #1 |", "| planned | |");
+    writeFileSync(
+      f,
+      readFileSync(f, "utf8").replace(
+        "| TH-NNN Story title | What it builds, in one or two sentences. | normal | planned | |",
+        rows,
+      ),
+    );
+    await cmdRender(this.root, cfg, "E99");
+    const h = join(dir, "HANDOFF.md");
+    writeFileSync(h, readFileSync(h, "utf8").replace("next=none", "next=TH-901"));
+    const [result] = await cmdCheck(this.root, cfg, "E99");
+    expect(result.problems).toEqual([]);
+    await git(this.root, "add", "-A");
+    await git(this.root, "commit", "-q", "-m", "plan E99");
+    await git(this.root, "push", "-q", "-u", "origin", "epic/E99-test-epic");
+    return dir;
+  }
 }

@@ -28,8 +28,8 @@ function load(dir: string) {
   };
 }
 
-test("templatePackagePassesCheck", () => {
-  const { e, h } = load(initE99(root));
+test("templatePackagePassesCheck", async () => {
+  const { e, h } = load(await initE99(root));
   expect(e.id).toBe("E99");
   expect(epicBranch(e)).toBe("epic/E99-test-epic");
   expect(checkPackage(e, h)).toEqual([]);
@@ -37,8 +37,8 @@ test("templatePackagePassesCheck", () => {
   expect(h?.text).toContain(`written=${TODAY}`);
 });
 
-test("filledPackagePassesAndRenderIsStable", () => {
-  const { e, h } = load(fill(root));
+test("filledPackagePassesAndRenderIsStable", async () => {
+  const { e, h } = load(await fill(root));
   expect(e.rows.map((r) => r.id)).toEqual(["TH-901", "TH-902", "TH-903"]);
   expect(e.ledger).toEqual([{ id: "TH-901", date: "2026-09-06" }]);
   expect(e.status.State).toBe("in_progress");
@@ -48,14 +48,14 @@ test("filledPackagePassesAndRenderIsStable", () => {
   expect(renderStatus(e)).toBe(e.text);
 });
 
-test("implementedWithoutLedgerFails", () => {
-  const { e, h } = load(fill(root, { ledger: "", after: "none" }));
+test("implementedWithoutLedgerFails", async () => {
+  const { e, h } = load(await fill(root, { ledger: "", after: "none" }));
   const problems = checkPackage(e, h);
   expect(problems.some((p) => p.includes("no `### TH-901")), problems.join("\n")).toBe(true);
 });
 
-test("handTypedStatusDriftIsReported", () => {
-  const d = fill(root);
+test("handTypedStatusDriftIsReported", async () => {
+  const d = await fill(root);
   const f = join(d, "EPIC.md");
   writeFileSync(
     f,
@@ -75,8 +75,8 @@ test("handTypedStatusDriftIsReported", () => {
   ).toBe(true);
 });
 
-test("handoffHeaderMustMatchLedgerAndNext", () => {
-  const { e, h } = load(fill(root, { after: "TH-902", next: "TH-903" }));
+test("handoffHeaderMustMatchLedgerAndNext", async () => {
+  const { e, h } = load(await fill(root, { after: "TH-902", next: "TH-903" }));
   const problems = checkPackage(e, h);
   expect(
     problems.some((p) => p.includes("after=TH-902 but the last ledger entry is TH-901")),
@@ -88,8 +88,8 @@ test("handoffHeaderMustMatchLedgerAndNext", () => {
   ).toBe(true);
 });
 
-test("handoffMissingHeadingFails", () => {
-  const d = fill(root);
+test("handoffMissingHeadingFails", async () => {
+  const d = await fill(root);
   const hf = join(d, "HANDOFF.md");
   writeFileSync(hf, readFileSync(hf, "utf8").replaceAll("## 5. Gotchas", "## Gotchas"));
   const { e, h } = load(d);
@@ -99,10 +99,10 @@ test("handoffMissingHeadingFails", () => {
   );
 });
 
-test("closedEpicHasNextNone", () => {
+test("closedEpicHasNextNone", async () => {
   const rows = ROWS.replaceAll("| planned | |", "| implemented | 2026-09-06 PR #2 |");
   const ledger = `${LEDGER_901}\n### TH-902 — 2026-09-06\n\n- x\n\n### TH-903 — 2026-09-06\n\n- x\n`;
-  const { e, h } = load(fill(root, { rows, ledger, after: "TH-903", next: "none" }));
+  const { e, h } = load(await fill(root, { rows, ledger, after: "TH-903", next: "none" }));
   expect(e.status.State).toBe("closed");
   expect(checkPackage(e, h)).toEqual([]);
 });
