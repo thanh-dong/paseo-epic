@@ -1,8 +1,7 @@
-import type { PaseoApi } from "@getpaseo/client";
 import type { PluginServerContext } from "@getpaseo/plugin/server";
-import type { AgentTimelineItem } from "@getpaseo/protocol/agent-types";
 import { parsePendingLine } from "../core/text";
 import type { SpawnNext } from "../core/types";
+import type { AgentTimelineItem, PaseoApi } from "../sdk-types";
 
 // The MCP process has no daemon SDK, so `epic_next` prints a pending line
 // ("Spawn pending for <next> after <closed>: ...") as the first line of its

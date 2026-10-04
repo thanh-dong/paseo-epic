@@ -1,10 +1,10 @@
-import type { PaseoApi } from "@getpaseo/client";
 import { type cmdNext, statusDir } from "../core/commands";
 import type { EpicConfig } from "../core/config";
 import type { localBranchExists } from "../core/git";
 import { findEpicDir, loadLocal } from "../core/locate";
 import { afterNext, nextPrompt } from "../core/text";
 import { EpicError, type SpawnNext } from "../core/types";
+import type { PaseoApi } from "../sdk-types";
 
 export type { SpawnNext, Spawned } from "../core/types";
 

@@ -1,9 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { PaseoApi } from "@getpaseo/client";
 import type { PluginServerContext } from "@getpaseo/plugin/server";
-import type { AgentTimelineItem } from "@getpaseo/protocol/agent-types";
 import { expect, test } from "vitest";
 import { cmdInit, type NextResult } from "../server/core/commands";
 import type { EpicConfig } from "../server/core/config";
@@ -12,6 +10,7 @@ import type { SpawnNext } from "../server/core/types";
 import { pendingNextFromTimeline, registerSpawnOnNext } from "../server/hooks/spawn-on-next";
 import { findWorkspaceByBranch } from "../server/rpc/handlers";
 import { createSpawnNext } from "../server/rpc/next";
+import type { AgentTimelineItem, PaseoApi } from "../server/sdk-types";
 import { makeRoot } from "./fixtures";
 
 const nextResult: NextResult = {
