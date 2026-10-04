@@ -1,4 +1,3 @@
-import type { PaseoApi } from "@getpaseo/client";
 import type { PluginServerContext } from "@getpaseo/plugin/server";
 import {
   checkRpc,
@@ -14,6 +13,7 @@ import { loadConfig } from "../core/config";
 import { localBranchExists } from "../core/git";
 import { isEpicRepo } from "../core/locate";
 import { EpicError, type SpawnNext } from "../core/types";
+import type { PaseoApi } from "../sdk-types";
 import { createSpawnNext } from "./next";
 
 /** Run `fn`; a refusal becomes a plain Error with the same text, so the client shows it inline. */

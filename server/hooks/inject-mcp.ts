@@ -1,4 +1,4 @@
-import type { AgentSessionConfig, McpStdioServerConfig } from "@getpaseo/protocol/agent-types";
+import type { AgentSessionConfig, McpStdioServerConfig } from "../sdk-types";
 
 /**
  * The stdio `epic` MCP server: the bundled script run by node, given the repo

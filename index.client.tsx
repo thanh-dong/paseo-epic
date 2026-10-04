@@ -1,9 +1,15 @@
-import type { PaseoApi } from "@getpaseo/client";
-import type { PluginClientContext, PluginWorkspaceCommandContext } from "@getpaseo/plugin/client";
+import type {
+  PluginCommandCapabilities,
+  PluginClientContext,
+  PluginWorkspaceCommandContext,
+} from "@getpaseo/plugin/client";
 import { checkRpc, initRpc, nextRpc, statusRpc } from "./shared/contracts";
 import { EpicPanel } from "./client/EpicPanel";
 import { errorText, folderName, type PanelResult, postResult } from "./client/results";
 import { closeInstructions, noAgent, startInstructions, USAGE } from "./client/strings";
+
+// Derived from the host SDK: `@getpaseo/client` is not installed on a production-only install.
+type PaseoApi = PluginCommandCapabilities["paseo"];
 
 const PANEL_ID = "epic";
 
