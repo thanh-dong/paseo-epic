@@ -62,8 +62,8 @@ Three kinds of caller use the plugin:
 | Caller | What it uses |
 | --- | --- |
 | You (human) | The **Epic** workspace panel, the `/epic <verb> [id]` slash command, and the Command Center item **Epic: start next story** |
-| The agent | The six `epic_*` tools of the `epic` MCP server |
-| The plugin itself | An `agent.create` hook that adds the `epic` MCP server to agents in an epic repo, and an `agent.turn_ended` hook that spawns the next story's agent after `epic_next` |
+| The agent | The seven `epic_*` tools of the `epic` MCP server |
+| The plugin itself | An `agent.create` hook that adds the `epic` MCP server to new agents in a repo with `.epic.yml` or an epic package, and an `agent.turn_ended` hook that spawns the next story's agent after `epic_next` |
 
 > [!IMPORTANT]
 > This plugin is for **one person running one epic on one daemon**. One story
@@ -130,7 +130,9 @@ it gives you the commands to run by hand.
 ## Quick start
 
 1. **Init.** `/epic init E1 "Search"` checks out `epic/E1-search` and writes
-   `EPIC.md` and `HANDOFF.md` under `docs/stories/epics/E1-search/`.
+   `EPIC.md` and `HANDOFF.md` under `docs/stories/epics/E1-search/`. A
+   planning agent can do the same with the `epic_init` tool, once the repo has
+   `.epic.yml`.
 2. **Plan.** Fill in the story table and the first handoff. Commit and push
    the epic branch; `start` reads the package from `origin`.
 3. **Start.** `/epic start TH-1` tells the agent to call `epic_start`. It cuts
@@ -161,14 +163,25 @@ letters, a dash, a number).
 
 ### Agent tools
 
-The plugin adds the `epic` MCP server to every agent created in an epic
-repo. Each answer is the result as JSON, then a short "what to do now"
-paragraph. A refusal is an error result with one sentence that says what to
-do next.
+The plugin adds the `epic` MCP server to a new agent when the agent's repo
+root has `.epic.yml`, or already has an epic package (an `EPIC.md` with the
+`<!-- epic-status:begin -->` marker under `epicsDir`). With `.epic.yml` alone,
+the agent can start the first epic with `epic_init`. A broken `.epic.yml`
+gives no tools, and the plugin log says why.
+
+> [!NOTE]
+> The tools are added only when an agent is created. An agent created before
+> the repo had `.epic.yml` (or before the plugin was installed) never gets
+> them, even though the plugin is running. Start a new agent in that
+> workspace.
+
+Each answer is the result as JSON, then a short "what to do now" paragraph.
+A refusal is an error result with one sentence that says what to do next.
 
 | Tool | Input | Returns |
 | --- | --- | --- |
-| `epic_status` | none | The epic package: state, story rows, next story, problems. |
+| `epic_init` | `epic`, `title` | Checks out the epic branch and writes `EPIC.md` and `HANDOFF.md`, like `/epic init`. Refuses a bad id, an existing `EPIC.md`, or a dirty tree. |
+| `epic_status` | none | The epic package: state, story rows, next story, problems. With no epic yet, says to call `epic_init`. |
 | `epic_start` | `story` | Cuts the story branch from the epic tip; returns the handoff and the `hooks.start` lines. |
 | `epic_close_check` | `story` | What still stops the story from closing, then the `hooks.close` lines. Writes nothing. |
 | `epic_close` | `story` | Commits the epic folder, pushes, opens the story PR (and a draft epic PR after the last story). |

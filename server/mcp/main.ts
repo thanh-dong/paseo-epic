@@ -1,9 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { closeProblems, cmdCheck, cmdClose, cmdNext, cmdStart, cmdStatus } from "../core/commands";
+import { closeProblems, cmdCheck, cmdClose, cmdInit, cmdNext, cmdStart, cmdStatus } from "../core/commands";
 import { loadConfig } from "../core/config";
-import { afterClose, afterCloseCheck, afterNext, afterStart, pendingLine } from "../core/text";
+import { isEpicRepo } from "../core/locate";
+import { afterClose, afterCloseCheck, afterInit, afterNext, afterStart, noEpicYet, pendingLine } from "../core/text";
 import { EpicError } from "../core/types";
 
 // The stdio MCP server the create hook gives every agent in an epic repo.
@@ -44,12 +45,31 @@ server.registerTool(
   },
   () =>
     answer(async () => {
-      const result = await cmdStatus(root, loadConfig(root));
+      const config = loadConfig(root);
+      // No package yet is a normal state of a repo with `.epic.yml`, not a failure.
+      if (!isEpicRepo(root, config)) {
+        return { result: { epic: null, epicsDir: config.epicsDir }, next: noEpicYet(config.epicsDir) };
+      }
+      const result = await cmdStatus(root, config);
       let next: string;
       if (result.problems.length > 0) next = "The package has problems. Fix the listed problems, then call epic_check.";
       else if (result.next === "none" || result.next === "") next = `${result.epic} has no open story.`;
       else next = `The next open story is ${result.next}. To begin it, call epic_start with ${result.next}.`;
       return { result, next };
+    }),
+);
+
+server.registerTool(
+  "epic_init",
+  {
+    description:
+      "Call to create a new epic: it checks out the epic branch from the base branch and writes EPIC.md and HANDOFF.md from the templates.",
+    inputSchema: { epic: z.string(), title: z.string() },
+  },
+  ({ epic, title }) =>
+    answer(async () => {
+      const result = await cmdInit(root, loadConfig(root), epic, title);
+      return { result, next: afterInit(result.branch) };
     }),
 );
 

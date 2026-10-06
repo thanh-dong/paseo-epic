@@ -26,12 +26,17 @@ The plugin gives you:
 - A `/epic <verb> [id]` slash command. Verbs: `init`, `start`, `close`,
   `next`, `check`, `status`.
 - A Command Center item: **Epic: start next story**.
-- An `epic` MCP server with six tools. The plugin adds it to every agent
-  created in an epic workspace.
+- An `epic` MCP server with seven tools. The plugin adds it to every new
+  agent whose repo has `.epic.yml` or an epic package.
 
-A workspace is "in an epic" when its repo root has the `epicsDir` folder
-(default `docs/stories/epics`) and some package folder in it has an
-`EPIC.md` with the `<!-- epic-status:begin -->` marker.
+A new agent gets the `epic` MCP server when its repo root has `.epic.yml`,
+or has the `epicsDir` folder (default `docs/stories/epics`) with a package
+folder whose `EPIC.md` has the `<!-- epic-status:begin -->` marker. The
+server is added when the agent is created, never later: an agent created
+before the repo had `.epic.yml` must be replaced by a new agent.
+
+The Epic panel shows a workspace as "in an epic" only once an epic package
+exists.
 
 ```
   you (Paseo app)                 plugin (daemon)            agent
@@ -198,11 +203,15 @@ anything from it. See [epic-yml.md](epic-yml.md).
 
 ## Agent tools
 
-The `epic` MCP server gives agents these six tools. Each answer is the
+The `epic` MCP server gives agents these seven tools. Each answer is the
 result as JSON, then a short "what to do now" paragraph.
 
+- `epic_init` (`epic`, `title`): checks out the epic branch and writes
+  `EPIC.md` and `HANDOFF.md`, like `/epic init`. Same refusals: a bad id, an
+  existing `EPIC.md`, a dirty tree.
 - `epic_status` (no input): the epic package this repo is on: state, story
-  rows, next story, problems.
+  rows, next story, problems. In a repo with no epic yet it says so and
+  points to `epic_init`, without an error.
 - `epic_start` (`story`): cuts the story branch from the epic tip and returns
   the handoff, plus the `.epic.yml` `hooks.start` lines.
 - `epic_close_check` (`story`): lists what still stops the story from

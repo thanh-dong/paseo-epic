@@ -34,6 +34,11 @@ const configSchema = z
   })
   .strict();
 
+/** True when `<root>/.epic.yml` exists, valid or not. */
+export function hasConfigFile(root: string): boolean {
+  return existsSync(join(root, CONFIG_FILE));
+}
+
 /** Read `<root>/.epic.yml` when present and merge it over the defaults. */
 export function loadConfig(root: string): EpicConfig {
   const file = join(root, CONFIG_FILE);

@@ -28,6 +28,24 @@ const NO_GH =
   "The PR and its comments were not read because `gh` was not available; " +
   "check the PR by hand for answers to open questions.";
 
+/** After `epic_init`: plan the epic, check it, push it; the first story is not built here. */
+export function afterInit(branch: string): string {
+  return paragraph([
+    `Created the epic package on branch ${branch}.`,
+    "Fill the story table and the Status block in EPIC.md, and HANDOFF.md for the first story.",
+    "Run epic_check until it reports ok, then commit and push the epic branch.",
+    "The first story starts in a fresh agent with epic_start; do not build it in this session.",
+  ]);
+}
+
+/** `epic_status` in a repo that has no epic package yet. */
+export function noEpicYet(epicsDir: string): string {
+  return paragraph([
+    `This repo has no epic yet: no EPIC.md under ${epicsDir}.`,
+    "Call epic_init with an epic id like E1 and a title to create one.",
+  ]);
+}
+
 /** After `epic_start`: the handoff is the context; `.epic.yml` start hooks follow. */
 export function afterStart(hooks: string[]): string {
   return paragraph([

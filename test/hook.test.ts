@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 import { resolveNodePath } from "../index.server";
 import { loadConfig } from "../server/core/config";
-import { isEpicRepo } from "../server/core/locate";
+import { isEpicRepo, wantsEpicTools } from "../server/core/locate";
 import { STATUS_BEGIN, STATUS_END } from "../server/core/types";
 import { buildMcpConfig, injectEpicMcp } from "../server/hooks/inject-mcp";
 
@@ -136,5 +136,61 @@ test("a throwing repoRoot leaves the request alone", () => {
     expect(log).toHaveBeenCalledTimes(1);
   } finally {
     log.mockRestore();
+  }
+});
+
+/** A temp folder standing in for a repo root (not a git repo: repoRoot is the identity here). */
+function tempRepo(): string {
+  return mkdtempSync(join(tmpdir(), "paseo-epic-detect-"));
+}
+
+const realDetection = { ...opts, isEpicRepo: wantsEpicTools, repoRoot: (cwd: string) => cwd };
+
+test("a repo with only .epic.yml gets the epic server", () => {
+  const root = tempRepo();
+  try {
+    writeFileSync(join(root, ".epic.yml"), "baseBranch: main\n");
+    const out = injectEpicMcp({ config: { provider: "claude", cwd: root } }, realDetection);
+    expect(out?.config.mcpServers?.epic).toEqual({ ...epicServer, args: ["/p/mcp/epic-mcp.mjs", root] });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a repo with an epic package and no .epic.yml still gets the epic server", () => {
+  const root = tempRepo();
+  try {
+    const dir = join(root, "docs", "stories", "epics", "E1-x");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "EPIC.md"), `# E1 — X\n\n${STATUS_BEGIN}\nState: planned\n${STATUS_END}\n`);
+    const out = injectEpicMcp({ config: { provider: "claude", cwd: root } }, realDetection);
+    expect(out?.config.mcpServers?.epic).toBeDefined();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a repo with neither .epic.yml nor an epic package gets nothing", () => {
+  const root = tempRepo();
+  try {
+    expect(injectEpicMcp({ config: { provider: "claude", cwd: root } }, realDetection)).toBeUndefined();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a broken .epic.yml still skips the agent and is logged once", () => {
+  const root = tempRepo();
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    writeFileSync(join(root, ".epic.yml"), "epicDir: typo\n");
+    const req = { config: { provider: "claude", cwd: root } };
+    expect(injectEpicMcp(req, realDetection)).toBeUndefined();
+    expect(injectEpicMcp(req, realDetection)).toBeUndefined();
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(String(log.mock.calls[0][0])).toContain(".epic.yml");
+  } finally {
+    log.mockRestore();
+    rmSync(root, { recursive: true, force: true });
   }
 });

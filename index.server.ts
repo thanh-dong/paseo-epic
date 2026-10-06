@@ -4,8 +4,7 @@ import { existsSync, mkdirSync, renameSync, statSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PluginServerContext } from "@getpaseo/plugin/server";
-import { loadConfig } from "./server/core/config";
-import { isEpicRepo } from "./server/core/locate";
+import { wantsEpicTools } from "./server/core/locate";
 import { injectEpicMcp } from "./server/hooks/inject-mcp";
 import { registerSpawnOnNext } from "./server/hooks/spawn-on-next";
 import { MCP_BUNDLE } from "./server/mcp/bundle.generated";
@@ -63,14 +62,6 @@ export function materializeMcpBundle(): string {
   return file;
 }
 
-/**
- * Epic detection for the create hook. Any throw (a bad `.epic.yml`, an
- * unreadable epics folder) is caught and logged by `injectEpicMcp`.
- */
-function detectEpic(root: string): boolean {
-  return isEpicRepo(root, loadConfig(root));
-}
-
 export default function contribute(server: PluginServerContext) {
   const mcpPath = materializeMcpBundle();
   const node = resolveNodePath();
@@ -79,7 +70,8 @@ export default function contribute(server: PluginServerContext) {
       mcpPath,
       nodePath: node.command,
       nodeEnv: node.env,
-      isEpicRepo: detectEpic,
+      // Any throw (a bad `.epic.yml`, an unreadable epics folder) is caught and logged by `injectEpicMcp`.
+      isEpicRepo: wantsEpicTools,
       repoRoot,
     }),
   );
