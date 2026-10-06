@@ -100,6 +100,11 @@ export async function storyChanges(dir: string, epicBranch: string): Promise<Sto
       continue;
     }
     const prev = byPath.get(f.path);
+    // A file new on the story and deleted again: against the base, nothing changed.
+    if (prev?.committed && prev.status === "A" && f.status === "D") {
+      byPath.delete(f.path);
+      continue;
+    }
     // A new or renamed file edited again is still new or renamed.
     const keep = prev && (prev.status === "A" || prev.status === "R") && f.status === "M";
     byPath.set(f.path, { path: f.path, status: keep ? prev.status : f.status, committed: false });

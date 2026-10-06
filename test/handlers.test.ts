@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import type { StoryChanges } from "../server/core/changes";
 import type { MergedPr } from "../server/core/git";
+import { EpicError } from "../server/core/types";
 import { resolveStoryChanges, type StoryChangesDeps } from "../server/rpc/story-changes";
 import { fill, makeRoot } from "./fixtures";
 
@@ -258,6 +259,12 @@ test("open PR wins, merged PR only for implemented rows, none without gh", async
 
   const noGh = fakeDeps({ gh: false, openPrs: [open], mergedPrs: merged });
   expect((await resolveStoryChanges(noGh.deps, { root, story: "TH-902" })).pr).toBeNull();
+});
+
+test("a gh refusal gives no PR instead of an error", async () => {
+  const { deps } = fakeDeps({ gh: true, openPrsError: new EpicError("gh is not logged in") });
+  const out = await resolveStoryChanges(deps, { root, story: "TH-902" });
+  expect(out.pr).toBeNull();
 });
 
 test("a gh failure that is not a refusal propagates", async () => {

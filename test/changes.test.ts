@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { parseNameStatus, parsePorcelain, storyChanges } from "../server/core/changes";
@@ -103,6 +103,19 @@ test("an uncommitted rename of a file new on the story stays new", async () => {
   const out = await storyChanges(fx.root, EPIC);
   expect(out.ahead).toBe(1);
   expect(out.files).toEqual([{ path: "src/newer.ts", status: "A", committed: false }]);
+});
+
+test("a file new on the story and deleted again without a commit is dropped", async () => {
+  mkdirSync(join(fx.root, "src"));
+  writeFileSync(join(fx.root, "src", "new.ts"), "export const fresh = 1;\n");
+  writeFileSync(join(fx.root, "src", "kept.ts"), "export const kept = 1;\n");
+  await git(fx.root, "add", "-A");
+  await git(fx.root, "commit", "-q", "-m", "new files");
+  unlinkSync(join(fx.root, "src", "new.ts"));
+
+  const out = await storyChanges(fx.root, EPIC);
+  expect(out.ahead).toBe(1);
+  expect(out.files).toEqual([{ path: "src/kept.ts", status: "A", committed: true }]);
 });
 
 test("refuses when the epic branch is not on the remote", async () => {
