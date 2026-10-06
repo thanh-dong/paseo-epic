@@ -4,6 +4,9 @@ import { useMemo } from "react";
 // The Epic panel's styles, shared by EpicPanel, StoryRow and FileList. Every
 // color comes from the host theme.
 
+/** A story row's chevron (14), gap (8), dot (8) and gap (8); headings, the compact second line and details indent by it. */
+export const MARKER_WIDTH = 38;
+
 export function useStyles(theme: PluginWorkspacePanelProps["theme"], compact: boolean) {
   return useMemo(
     () => ({
@@ -19,7 +22,7 @@ export function useStyles(theme: PluginWorkspacePanelProps["theme"], compact: bo
       chevron: { color: theme.colors.foregroundMuted, width: 14 },
       dot: { width: 8, height: 8, borderRadius: 4 },
       dotColors: { active: theme.colors.accent, done: theme.colors.foreground, other: theme.colors.foregroundMuted },
-      details: { paddingLeft: 30, paddingVertical: 6, gap: 6 },
+      details: { paddingLeft: MARKER_WIDTH, paddingVertical: 6, gap: 6 },
       refresh: { alignSelf: "flex-end" as const },
       fileLine: { flexDirection: "row" as const, gap: 8 },
       letter: { color: theme.colors.foregroundMuted, width: 14 },

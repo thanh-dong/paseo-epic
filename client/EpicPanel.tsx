@@ -84,14 +84,18 @@ export function EpicPanel({ theme, layout, workspaceId, navigation }: PluginWork
       if (!dir) return;
       const seq = ++rowSeqNext.current;
       rowSeq.current.set(story, seq);
-      const settle = (s: RowState) => {
-        if (rowSeq.current.get(story) === seq) setRowStates((prev) => new Map(prev).set(story, s));
+      const settle = (next: (prev: RowState | undefined) => RowState) => {
+        if (rowSeq.current.get(story) === seq) {
+          setRowStates((prev) => new Map(prev).set(story, next(prev.get(story))));
+        }
       };
       setRowStates((prev) => new Map(prev).set(story, { phase: "loading", data: prev.get(story)?.data }));
       try {
-        settle({ phase: "ready", data: await storyChanges({ workspaceDir: dir, story }) });
+        const data = await storyChanges({ workspaceDir: dir, story });
+        settle(() => ({ phase: "ready", data }));
       } catch (err) {
-        settle({ phase: "error", error: errorText(err) });
+        // A failed Refresh keeps the row's previous data under the error.
+        settle((prev) => ({ phase: "error", error: errorText(err), data: prev?.data }));
       }
     },
     [dir, storyChanges],

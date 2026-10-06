@@ -1,7 +1,7 @@
 import type { PluginWorkspacePanelProps } from "@getpaseo/plugin/client";
 import type { ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
-import type { Styles } from "./styles";
+import { MARKER_WIDTH, type Styles } from "./styles";
 import { FileList } from "./FileList";
 import type { Status, StoryChangesResult } from "./results";
 import { changesVs, labels } from "./strings";
@@ -30,9 +30,6 @@ interface RowProps {
 }
 
 const COLUMN_WIDTHS = { story: 220, lane: 90, status: 110 } as const;
-
-/** The chevron and the dot take this width; the column headings indent by it. */
-const MARKER_WIDTH = 30;
 
 /** The story table: column headings (wide layout only), then one row per story. */
 export function StoryList(
@@ -88,7 +85,7 @@ export function StoryRow(props: RowProps & { row: Row }) {
     <View>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`${row.id} ${row.title}`}
+        accessibilityLabel={`${row.id} ${row.title}, ${row.lane}, ${row.status}${row.done ? `, ${row.done}` : ""}`}
         accessibilityState={{ expanded }}
         onPress={onToggle}
         style={compact ? styles.stackedRow : styles.rowHeader}
