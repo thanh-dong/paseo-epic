@@ -22,7 +22,9 @@ chain short and honest:
 The plugin gives you:
 
 - An **Epic** workspace panel: the epic, its story table, the next story,
-  the open PR, and two buttons: **Check** and **Start next story**.
+  the open PR, and two buttons: **Check** and **Start next story**. A story
+  row opens to show the story's workspace and agent with **Open workspace**
+  and **Open agent** buttons, its PR link, and the files it changed.
 - A `/epic <verb> [id]` slash command. Verbs: `init`, `start`, `close`,
   `next`, `check`, `status`.
 - A Command Center item: **Epic: start next story**.
@@ -138,6 +140,42 @@ Install only plugins whose source you have read.
 
 The full text the tools give the agent is in [routine.md](routine.md).
 
+## The Epic panel
+
+Press a story row to open it. The `in_progress` row starts open; when no row
+is in progress, the next story's row does. An open row shows:
+
+- `workspace <name>` and **Open workspace**; `agent <title> (<status>)` and
+  **Open agent**. The buttons appear only when the Paseo app supports
+  navigation from a panel.
+- `PR` and the story PR as a link (`#296 (open)`), or the row's Done text, or
+  `none yet`.
+- `changes vs <base>: <n> files, <m> uncommitted`, then one line per file:
+  the status letter `A`, `M`, `D` or `R`, the path, and an `uncommitted` tag.
+  `No changes yet.` when the list is empty.
+- A note when no workspace, or more than one, is on the story branch.
+
+For an open row the panel calls the RPC `epic.story-changes` with the story
+id. The RPC finds the workspace whose current branch is
+`<branchPrefix><story>-...` (the panel's own workspace wins when it is on that
+branch), the newest open agent labelled `epic.story` with the story (else the
+newest open agent whose working directory is in that workspace), and the PR
+through `gh` (open first; merged for an `implemented` row; none without
+`gh`). In the story's worktree it lists the files committed since the branch
+left the epic branch (`git diff --name-status origin/<epic>...HEAD`) and the
+uncommitted and untracked files (`git status --porcelain
+--untracked-files=all`). It does not fetch. It refuses a bad or unknown
+story id and a missing `origin/<epic>` branch, and the panel shows the
+refusal inside the row. A missing workspace, agent or PR is empty, not an
+error.
+
+The row loads the first time you open it and again on **Refresh**. There is
+no timer.
+
+Review flow: open the Epic panel in any workspace of the repo, open the
+story's row, press **Open workspace**, and review the change in Paseo's Diff
+tab.
+
 ## The `next` flow
 
 | Who | How | What happens |
@@ -246,5 +284,6 @@ do next.
   `epic_close` returns the commands to run by hand, and `next` says the PR
   comments were not read.
 - The panel reads the package when it opens, after a button press, and after
-  an `/epic` command result. It does not refresh on a timer.
+  an `/epic` command result. An open story row reads `epic.story-changes`
+  when you open it and on **Refresh**. Nothing refreshes on a timer.
 - The npm package is not published yet.
