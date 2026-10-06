@@ -40,18 +40,26 @@ export function parseNameStatus(out: string): ChangedFile[] {
   });
 }
 
+/** An uncommitted entry; `from` is the old path of a rename. */
+export interface UncommittedFile extends ChangedFile {
+  from?: string;
+}
+
 /** Parse `git status --porcelain`; every entry is uncommitted. */
-export function parsePorcelain(out: string): ChangedFile[] {
+export function parsePorcelain(out: string): UncommittedFile[] {
   return lines(out).map((line) => {
     const xy = line.slice(0, 2);
-    let rest = line.slice(3);
+    const rest = line.slice(3);
+    if (xy[0] === "R" || xy[0] === "C") {
+      const at = rest.lastIndexOf(" -> ");
+      const path = unquote(rest.slice(at + 4));
+      // A copy's source still exists, so only a rename carries the old path.
+      if (xy[0] === "C") return { path, status: "A", committed: false };
+      return { path, status: "R", committed: false, from: unquote(rest.slice(0, at)) };
+    }
     let status: ChangeStatus = "M";
     if (xy === "??" || xy[0] === "A") status = "A";
     else if (xy === "D " || xy === " D") status = "D";
-    else if (xy[0] === "R") {
-      status = "R";
-      rest = rest.slice(rest.lastIndexOf(" -> ") + 4);
-    }
     return { path: unquote(rest), status, committed: false };
   });
 }
@@ -64,15 +72,27 @@ export async function storyChanges(dir: string, epicBranch: string): Promise<Sto
   const base = `origin/${epicBranch}`;
   const head = await currentBranch(dir);
   const ahead = Number((await run(["git", "rev-list", "--count", `${base}..HEAD`], dir)).trim());
+  const quiet = ["-c", "core.quotePath=false"];
   const committed = parseNameStatus(
-    await run(["git", "-c", "core.quotePath=false", "diff", "--name-status", `${base}...HEAD`], dir),
+    await run(["git", ...quiet, "-c", "diff.renames=true", "diff", "--name-status", `${base}...HEAD`], dir),
   );
   const uncommitted = parsePorcelain(
-    await run(["git", "-c", "core.quotePath=false", "status", "--porcelain", "--untracked-files=all"], dir),
+    await run(
+      ["git", ...quiet, "-c", "status.renames=true", "status", "--porcelain", "--untracked-files=all"],
+      dir,
+    ),
   );
 
   const byPath = new Map(committed.map((f) => [f.path, f]));
   for (const f of uncommitted) {
+    if (f.from !== undefined) {
+      // An uncommitted rename: the old path is gone. A file that was new on the
+      // story branch is still new under its new name.
+      const old = byPath.get(f.from);
+      byPath.delete(f.from);
+      byPath.set(f.path, { path: f.path, status: old?.status === "A" ? "A" : "R", committed: false });
+      continue;
+    }
     const prev = byPath.get(f.path);
     // A new or renamed file edited again is still new or renamed.
     const keep = prev && (prev.status === "A" || prev.status === "R") && f.status === "M";

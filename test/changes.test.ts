@@ -83,6 +83,28 @@ test("a base file renamed in a commit and edited again stays renamed", async () 
   expect(out.files).toEqual([{ path: "docs/templates/epic-renamed.md", status: "R", committed: false }]);
 });
 
+test("an uncommitted rename of a base file drops the old path", async () => {
+  writeFileSync(join(fx.root, "docs", "templates", "epic.md"), "edited\n", { flag: "a" });
+  await git(fx.root, "commit", "-q", "-am", "edit epic template");
+  await git(fx.root, "mv", "docs/templates/epic.md", "docs/templates/e2.md");
+
+  const out = await storyChanges(fx.root, EPIC);
+  expect(out.ahead).toBe(1);
+  expect(out.files).toEqual([{ path: "docs/templates/e2.md", status: "R", committed: false }]);
+});
+
+test("an uncommitted rename of a file new on the story stays new", async () => {
+  mkdirSync(join(fx.root, "src"));
+  writeFileSync(join(fx.root, "src", "new.ts"), "export const fresh = 1;\n");
+  await git(fx.root, "add", "-A");
+  await git(fx.root, "commit", "-q", "-m", "new file");
+  await git(fx.root, "mv", "src/new.ts", "src/newer.ts");
+
+  const out = await storyChanges(fx.root, EPIC);
+  expect(out.ahead).toBe(1);
+  expect(out.files).toEqual([{ path: "src/newer.ts", status: "A", committed: false }]);
+});
+
 test("refuses when the epic branch is not on the remote", async () => {
   await expect(storyChanges(fx.root, "epic/E1-missing")).rejects.toThrow(
     "origin/epic/E1-missing does not exist; push the epic branch first",
@@ -98,7 +120,18 @@ test("parsePorcelain and parseNameStatus handle renames and quoted paths", () =>
   expect(parsePorcelain('?? "with space.md"\n D gone.ts\nR  old.ts -> new.ts\n M edit.ts\n')).toEqual([
     { path: "with space.md", status: "A", committed: false },
     { path: "gone.ts", status: "D", committed: false },
-    { path: "new.ts", status: "R", committed: false },
+    { path: "new.ts", status: "R", committed: false, from: "old.ts" },
     { path: "edit.ts", status: "M", committed: false },
+  ]);
+  expect(parsePorcelain("A  added.ts\nAM both.ts\nD  staged-gone.ts\nRM a/old.ts -> a/new.ts\n")).toEqual([
+    { path: "added.ts", status: "A", committed: false },
+    { path: "both.ts", status: "A", committed: false },
+    { path: "staged-gone.ts", status: "D", committed: false },
+    { path: "a/new.ts", status: "R", committed: false, from: "a/old.ts" },
+  ]);
+  expect(parseNameStatus('C75\told.ts\tcopy.ts\nT\tx\nM\t"say \\"hi\\".md"\n')).toEqual([
+    { path: "copy.ts", status: "A", committed: true },
+    { path: "x", status: "M", committed: true },
+    { path: 'say "hi".md', status: "M", committed: true },
   ]);
 });
