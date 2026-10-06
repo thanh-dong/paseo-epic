@@ -219,7 +219,11 @@ An open row shows, from top to bottom:
 The buttons appear only when your Paseo app supports navigation from a
 panel; older apps show the names as text.
 
-The panel finds these things on the daemon:
+The panel lists the epics in its own checkout, so open it in a workspace on
+the epic branch or on one of its story branches, or in the story's worktree.
+
+The panel looks in its own Paseo project for the workspace and the agent,
+and asks `gh` for the PR:
 
 - The workspace whose current branch is the story branch
   (`<branchPrefix><story>-...`). When the panel's own workspace is on that
@@ -237,9 +241,9 @@ does not fetch, so `origin/<epic>` is the epic branch as last fetched. A row
 loads the first time you open it and again when you press **Refresh**; it
 does not refresh on a timer. Errors show inside the open row.
 
-Review flow: open the Epic panel in any workspace of the repo, open the
-story's row, press **Open workspace**, and review the change in Paseo's Diff
-tab.
+Review flow: open the Epic panel in a workspace whose checkout holds the epic
+package (see above), open the story's row, press **Open workspace**, and
+review the change in Paseo's Diff tab.
 
 ### `.epic.yml`
 

@@ -51,9 +51,9 @@ through the table.
 | 18 | Branch-off for a successor | Paseo accepts `baseBranch: origin/epic/…` (a remote ref) and cuts the story branch from it | pending | |
 | 19 | Reply `next` to a closing agent after the story PR merged | the `agent.turn_ended` hook spawns the successor after `epic_next`, and the closing agent gets `Started agent ...` | pending | |
 | 20 | Reply `next` again, or press **Start next story**, right after row 19 | `gitRuntime.currentBranch` of the new workspace is already filled, so the plugin finds it and starts no second agent | pending | |
-| 21 | Epic panel in the main checkout, with a story in progress in its own worktree | the `in_progress` row starts open and lists the worktree's changed files, not the main checkout's | pending | |
+| 21 | Epic panel with a story in progress in its own worktree: run it once from a checkout on the epic branch and once from a checkout on `main`, and record what happens in each | from the epic branch, the `in_progress` row starts open and lists the worktree's changed files, not the checkout's; from `main`, record whether the epic shows or the row refuses with `no epic package lists <story> in this checkout; ...` | pending | |
 | 22 | Press **Open workspace** in that row | the app lands in the story's worktree workspace; record what `navigation.openWorkspace` does (switches to the workspace, or only selects it in the sidebar) | pending | |
-| 23 | Compare the row's file list with `git status --porcelain --untracked-files=all` and `git diff --name-status origin/<epic>...HEAD` run in the worktree | the same files, the same status letters, and the `uncommitted` tag on exactly the uncommitted and untracked ones | pending | |
+| 23 | Compare the row's file list with `git status --porcelain --untracked-files=all` and `git diff --name-status origin/<epic>...HEAD` run in the worktree | the same files, the same status letters after the merge rules (new or renamed files keep A or R; a new file deleted again disappears), and the `uncommitted` tag on exactly the uncommitted and untracked ones | pending | |
 | 24 | Press **Open agent** in that row | the app opens the story's agent | pending | |
 | 25 | An open story row in the compact layout and in a second theme | the row and its file lines stay readable; long paths keep their end visible; the status dot is visible in both themes | pending | |
 

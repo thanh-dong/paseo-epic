@@ -155,8 +155,14 @@ is in progress, the next story's row does. An open row shows:
   `No changes yet.` when the list is empty.
 - A note when no workspace, or more than one, is on the story branch.
 
+The panel lists the epics in its own checkout. Inflow-style repos keep a
+package only on its epic branch, so open the panel in a workspace that is on
+the epic branch or on one of its story branches, or in the story's worktree.
+
 For an open row the panel calls the RPC `epic.story-changes` with the story
-id. The RPC finds the workspace whose current branch is
+id. The RPC searches the workspaces and agents of the panel's own Paseo
+project (all of them when the panel's checkout is in no workspace). It finds
+the workspace whose current branch is
 `<branchPrefix><story>-...` (the panel's own workspace wins when it is on that
 branch), the newest open agent labelled `epic.story` with the story (else the
 newest open agent whose working directory is in that workspace), and the PR
@@ -164,17 +170,19 @@ through `gh` (open first; merged for an `implemented` row; none without
 `gh`). In the story's worktree it lists the files committed since the branch
 left the epic branch (`git diff --name-status origin/<epic>...HEAD`) and the
 uncommitted and untracked files (`git status --porcelain
---untracked-files=all`). It does not fetch. It refuses a bad or unknown
-story id and a missing `origin/<epic>` branch, and the panel shows the
-refusal inside the row. A missing workspace, agent or PR is empty, not an
+--untracked-files=all`). It does not fetch. It refuses a bad story id and a
+story that no epic package in the panel's checkout lists. Once it has found
+the story's worktree, it also refuses a worktree directory that no longer
+exists and a missing `origin/<epic>` branch. The panel shows the refusal
+inside the row. A missing workspace, agent or PR is empty, not an
 error.
 
 The row loads the first time you open it and again on **Refresh**. There is
 no timer.
 
-Review flow: open the Epic panel in any workspace of the repo, open the
-story's row, press **Open workspace**, and review the change in Paseo's Diff
-tab.
+Review flow: open the Epic panel in a workspace whose checkout holds the epic
+package (see above), open the story's row, press **Open workspace**, and
+review the change in Paseo's Diff tab.
 
 ## The `next` flow
 

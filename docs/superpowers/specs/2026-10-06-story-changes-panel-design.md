@@ -113,6 +113,8 @@ Output:
 Missing workspace, agent or PR are `null`, never errors. The only refusals
 are the unknown story and the missing remote epic branch.
 
+Implementation note (2026-10-06): the workspace and agent search is scoped to the caller's project; the package is read from the panel's checkout, so a checkout without the epic package cannot show it (follow-up: read from origin/epic/*).
+
 ## 5. The panel
 
 The header, the two buttons and the result area stay as they are. The story
@@ -147,6 +149,8 @@ stays near its current size.
 
 Review flow after this change: open the Epic panel in any workspace of the
 repo, expand the story, press **Open workspace**, review in Paseo's Diff tab.
+
+Implementation note (2026-10-06): compact rows show the full path cut at the start (ellipsizeMode head), not the last two segments.
 
 ## 6. Errors
 
