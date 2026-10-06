@@ -12,6 +12,8 @@ interface WorkspaceEntry {
   directory: string;
   name: string;
   branch: string | null;
+  projectId: string;
+  projectRootPath: string;
 }
 
 interface AgentEntry {
@@ -19,6 +21,7 @@ interface AgentEntry {
   title: string | null;
   status: string;
   cwd: string;
+  workspaceId: string | null;
   labels: Record<string, string>;
   createdAt: string;
 }
@@ -105,15 +108,25 @@ export async function resolveStoryChanges(
   if (row === undefined) throw new EpicError(unknown);
   const base = epicBranch(epic);
 
+  // Search the caller's project only; a caller in no workspace searches them all.
+  const all = (await deps.listWorkspaces()).filter((w) => w.directory !== "");
+  const caller =
+    all.find((w) => w.directory === root) ??
+    all.find((w) => w.projectRootPath !== "" && isUnder(root, w.projectRootPath));
+  const scoped = caller ? all.filter((w) => w.projectId === caller.projectId) : all;
+  const ids = new Set(scoped.map((w) => w.id));
+
   const prefix = `${config.branchPrefix}${story}-`;
-  const onBranch = (await deps.listWorkspaces()).filter((w) => w.branch?.startsWith(prefix));
+  const onBranch = scoped.filter((w) => w.branch?.startsWith(prefix));
   // The caller's own workspace wins when it is on the story branch.
   const ws = onBranch.find((w) => w.directory === root) ?? onBranch[0] ?? null;
   let note: string | null = null;
   if (ws === null) note = `no workspace for ${story} on this daemon`;
   else if (onBranch.length > 1) note = `more than one workspace is on ${ws.branch}; showing ${ws.name}`;
 
-  const agents = await deps.listAgents();
+  const agents = (await deps.listAgents()).filter(
+    (a) => (a.workspaceId !== null && ids.has(a.workspaceId)) || scoped.some((w) => isUnder(a.cwd, w.directory)),
+  );
   const agent =
     newest(agents.filter((a) => a.labels["epic.story"] === story)) ??
     (ws && newest(agents.filter((a) => isUnder(a.cwd, ws.directory))));
@@ -145,6 +158,8 @@ export function defaultDeps(paseo: PaseoApi): StoryChangesDeps {
             directory: w.workspaceDirectory ?? "",
             name: w.name,
             branch: w.gitRuntime?.currentBranch ?? null,
+            projectId: w.projectId,
+            projectRootPath: w.projectRootPath,
           });
         }
         if (!page.pageInfo?.hasMore || !page.pageInfo.nextCursor) return out;
@@ -165,6 +180,7 @@ export function defaultDeps(paseo: PaseoApi): StoryChangesDeps {
             title: a.title,
             status: a.status,
             cwd: a.cwd,
+            workspaceId: a.workspaceId ?? null,
             labels: a.labels ?? {},
             createdAt: a.createdAt,
           });

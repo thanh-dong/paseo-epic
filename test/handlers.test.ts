@@ -18,16 +18,26 @@ const CHANGES: StoryChanges = {
   files: [{ path: "two.ts", status: "A", committed: true }],
 };
 
-const WS_OTHER: Workspace = { id: "ws_1", directory: "/wt/other", name: "Other", branch: "main" };
+const PROJECT = { projectId: "proj_1", projectRootPath: "/wt" };
+const WS_OTHER: Workspace = { id: "ws_1", directory: "/wt/other", name: "Other", branch: "main", ...PROJECT };
 const WS_902: Workspace = {
   id: "ws_2",
   directory: "/wt/TH-902",
   name: "TH-902 Second thing",
   branch: "feat/TH-902-second-thing",
+  ...PROJECT,
 };
 
 function agent(over: Partial<Agent> & { id: string }): Agent {
-  return { title: null, status: "idle", cwd: "/elsewhere", labels: {}, createdAt: "2026-10-06T10:00:00Z", ...over };
+  return {
+    title: null,
+    status: "idle",
+    cwd: "/elsewhere",
+    workspaceId: null,
+    labels: {},
+    createdAt: "2026-10-06T10:00:00Z",
+    ...over,
+  };
 }
 
 /** A fake with no git and no gh: `changes` returns CHANGES and records its arguments. */
@@ -85,6 +95,7 @@ test("finds the workspace by branch and the agent by label", async () => {
       agent({
         id: "ag_new",
         title: "TH-902 Second thing",
+        workspaceId: "ws_1",
         labels: { "epic.story": "TH-902" },
         createdAt: "2026-10-06T11:00:00Z",
       }),
@@ -116,6 +127,59 @@ test("falls back to the agent whose cwd is under the workspace", async () => {
   });
   const out = await resolveStoryChanges(deps, { root, story: "TH-902" });
   expect(out.agent).toEqual({ id: "ag_under", title: null, status: "idle" });
+});
+
+test("a second project's workspace and labelled agent are ignored", async () => {
+  // No workspace sits at root, but proj_1's root path is a parent of it.
+  const story: Workspace = { ...WS_902, projectRootPath: tmp };
+  const foreign: Workspace = {
+    id: "ws_x",
+    directory: "/x/TH-902",
+    name: "TH-902 other project",
+    branch: "feat/TH-902-other",
+    projectId: "proj_2",
+    projectRootPath: "/x",
+  };
+  const blank: Workspace = { ...story, id: "ws_blank", directory: "", name: "Blank" };
+  const { deps, calls } = fakeDeps({
+    workspaces: [foreign, blank, story],
+    agents: [
+      agent({
+        id: "ag_foreign",
+        workspaceId: "ws_x",
+        cwd: "/x/TH-902",
+        labels: { "epic.story": "TH-902" },
+        createdAt: "2026-10-06T12:00:00Z",
+      }),
+      agent({ id: "ag_foreign_cwd", cwd: "/x/TH-902/apps", labels: { "epic.story": "TH-902" } }),
+      agent({ id: "ag_here", cwd: "/wt/TH-902/apps", createdAt: "2026-10-06T09:00:00Z" }),
+    ],
+  });
+  const out = await resolveStoryChanges(deps, { root, story: "TH-902" });
+  expect(out.workspace).toEqual({ id: "ws_2", directory: "/wt/TH-902", name: "TH-902 Second thing" });
+  expect(out.agent).toEqual({ id: "ag_here", title: null, status: "idle" });
+  expect(out.note).toBeNull();
+  expect(calls).toEqual([["/wt/TH-902", "epic/E99-test-epic"]]);
+});
+
+test("a caller in no workspace searches every project", async () => {
+  const foreign: Workspace = {
+    id: "ws_x",
+    directory: "/x/TH-902",
+    name: "TH-902 other project",
+    branch: "feat/TH-902-other",
+    projectId: "proj_2",
+    projectRootPath: "/x",
+  };
+  const { deps, calls } = fakeDeps({
+    workspaces: [foreign, WS_902],
+    agents: [agent({ id: "ag_x", workspaceId: "ws_x", labels: { "epic.story": "TH-902" } })],
+  });
+  const out = await resolveStoryChanges(deps, { root, story: "TH-902" });
+  expect(out.workspace).toEqual({ id: "ws_x", directory: "/x/TH-902", name: "TH-902 other project" });
+  expect(out.agent).toEqual({ id: "ag_x", title: null, status: "idle" });
+  expect(out.note).toBe("more than one workspace is on feat/TH-902-other; showing TH-902 other project");
+  expect(calls).toEqual([["/x/TH-902", "epic/E99-test-epic"]]);
 });
 
 test("no workspace gives null fields and the note", async () => {
