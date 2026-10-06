@@ -37,8 +37,10 @@ function fakeDeps(opts: {
   gh?: boolean;
   openPrs?: OpenPr[];
   mergedPrs?: MergedPr[];
+  openPrsError?: Error;
 }) {
   const calls: Array<[string, string]> = [];
+  const prCalls: Array<[string, string, string]> = [];
   const deps: StoryChangesDeps = {
     listWorkspaces: async () => opts.workspaces ?? [],
     listAgents: async () => opts.agents ?? [],
@@ -48,11 +50,18 @@ function fakeDeps(opts: {
     },
     gh: {
       available: async () => opts.gh ?? false,
-      openPrs: async () => opts.openPrs ?? [],
-      mergedPrs: async () => opts.mergedPrs ?? [],
+      openPrs: async (root, base) => {
+        prCalls.push(["open", root, base]);
+        if (opts.openPrsError) throw opts.openPrsError;
+        return opts.openPrs ?? [];
+      },
+      mergedPrs: async (root, base) => {
+        prCalls.push(["merged", root, base]);
+        return opts.mergedPrs ?? [];
+      },
     },
   };
-  return { deps, calls };
+  return { deps, calls, prCalls };
 }
 
 let tmp = "";
@@ -72,7 +81,7 @@ test("finds the workspace by branch and the agent by label", async () => {
   const { deps, calls } = fakeDeps({
     workspaces: [WS_OTHER, WS_902],
     agents: [
-      agent({ id: "ag_old", cwd: "/wt/TH-902", createdAt: "2026-10-06T09:00:00Z" }),
+      agent({ id: "ag_cwd", cwd: "/wt/TH-902", createdAt: "2026-10-06T12:00:00Z" }),
       agent({
         id: "ag_new",
         title: "TH-902 Second thing",
@@ -128,6 +137,15 @@ test("a duplicate worktree on the branch picks the first and notes it", async ()
   expect(calls).toEqual([["/wt/TH-902", "epic/E99-test-epic"]]);
 });
 
+test("the caller's own workspace wins among duplicates on the branch", async () => {
+  const own: Workspace = { ...WS_902, id: "ws_3", directory: root, name: "TH-902 here" };
+  const { deps, calls } = fakeDeps({ workspaces: [WS_902, own] });
+  const out = await resolveStoryChanges(deps, { root, story: "TH-902" });
+  expect(out.workspace).toEqual({ id: "ws_3", directory: root, name: "TH-902 here" });
+  expect(out.note).toBe("more than one workspace is on feat/TH-902-second-thing; showing TH-902 here");
+  expect(calls).toEqual([[root, "epic/E99-test-epic"]]);
+});
+
 test("open PR wins, merged PR only for implemented rows, none without gh", async () => {
   const open: OpenPr = {
     number: 7,
@@ -159,6 +177,8 @@ test("open PR wins, merged PR only for implemented rows, none without gh", async
     state: "open",
   });
 
+  expect(withOpen.prCalls).toEqual([["open", root, "epic/E99-test-epic"]]);
+
   const noOpen = fakeDeps({ gh: true, openPrs: [], mergedPrs: merged });
   expect((await resolveStoryChanges(noOpen.deps, { root, story: "TH-901" })).pr).toEqual({
     number: 1,
@@ -166,9 +186,26 @@ test("open PR wins, merged PR only for implemented rows, none without gh", async
     state: "merged",
   });
   expect((await resolveStoryChanges(noOpen.deps, { root, story: "TH-902" })).pr).toBeNull();
+  expect(noOpen.prCalls).toEqual([
+    ["open", root, "epic/E99-test-epic"],
+    ["merged", root, "epic/E99-test-epic"],
+    ["open", root, "epic/E99-test-epic"],
+  ]);
 
   const noGh = fakeDeps({ gh: false, openPrs: [open], mergedPrs: merged });
   expect((await resolveStoryChanges(noGh.deps, { root, story: "TH-902" })).pr).toBeNull();
+});
+
+test("a gh failure that is not a refusal propagates", async () => {
+  const { deps } = fakeDeps({ gh: true, openPrsError: new Error("boom") });
+  await expect(resolveStoryChanges(deps, { root, story: "TH-902" })).rejects.toThrow("boom");
+});
+
+test("an id that is not a story id refuses with the next step", async () => {
+  const { deps } = fakeDeps({});
+  await expect(resolveStoryChanges(deps, { root, story: "E99" })).rejects.toThrow(
+    "`E99` is not a story id like TH-652; check the story id",
+  );
 });
 
 test("unknown story refuses with the next step", async () => {

@@ -4,7 +4,7 @@ import { pickMergedPr } from "../core/commands";
 import { loadConfig } from "../core/config";
 import { ghAvailable, ghMergedPrs, ghOpenPrs } from "../core/git";
 import { findEpicDir, loadLocal } from "../core/locate";
-import { EpicError } from "../core/types";
+import { EpicError, STORY_ID_RE } from "../core/types";
 import type { PaseoApi } from "../sdk-types";
 
 interface WorkspaceEntry {
@@ -89,12 +89,15 @@ export async function resolveStoryChanges(
 ): Promise<StoryChangesResult> {
   const { root, story } = input;
   const config = loadConfig(root);
+  if (!STORY_ID_RE.test(story)) throw new EpicError(`\`${story}\` is not a story id like TH-652; check the story id`);
   const unknown = `no epic package lists ${story}; check the story id`;
   let dir: string;
   try {
     dir = findEpicDir(root, config, story);
   } catch (err) {
-    if (err instanceof EpicError) throw new EpicError(unknown);
+    if (err instanceof EpicError && err.message.startsWith("no EPIC.md story list contains")) {
+      throw new EpicError(unknown);
+    }
     throw err;
   }
   const { epic } = loadLocal(dir);
@@ -104,7 +107,8 @@ export async function resolveStoryChanges(
 
   const prefix = `${config.branchPrefix}${story}-`;
   const onBranch = (await deps.listWorkspaces()).filter((w) => w.branch?.startsWith(prefix));
-  const ws = onBranch[0] ?? null;
+  // The caller's own workspace wins when it is on the story branch.
+  const ws = onBranch.find((w) => w.directory === root) ?? onBranch[0] ?? null;
   let note: string | null = null;
   if (ws === null) note = `no workspace for ${story} on this daemon`;
   else if (onBranch.length > 1) note = `more than one workspace is on ${ws.branch}; showing ${ws.name}`;
