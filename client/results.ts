@@ -4,10 +4,11 @@
 // panel may already be open, so it also listens for new posts.
 
 import type { output as ZodOutput } from "zod";
-import type { statusRpc } from "../shared/contracts";
+import type { statusRpc, storyChangesRpc } from "../shared/contracts";
 
 type StatusContract = typeof statusRpc;
 export type Status = ZodOutput<StatusContract["output"]>;
+export type StoryChangesResult = ZodOutput<(typeof storyChangesRpc)["output"]>;
 
 export interface PanelResult {
   /**

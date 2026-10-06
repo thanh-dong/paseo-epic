@@ -1,9 +1,12 @@
 import { type PluginWorkspacePanelProps, useRpc, useWorkspace } from "@getpaseo/plugin/client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
-import { checkRpc, isEpicRpc, nextRpc, statusRpc } from "../shared/contracts";
-import { errorText, onResult, type PanelResult, type Status, takeResult } from "./results";
+import { checkRpc, isEpicRpc, nextRpc, statusRpc, storyChangesRpc } from "../shared/contracts";
+import { PanelHeader } from "./PanelHeader";
+import { errorText, onResult, type PanelResult, takeResult } from "./results";
+import { type RowState, type StoryId, StoryList } from "./StoryRow";
 import { labels } from "./strings";
+import { type Styles, useStyles } from "./styles";
 
 interface PanelState extends Omit<PanelResult, "ref"> {
   phase: "loading" | "no-epic" | "ready" | "error";
@@ -11,34 +14,6 @@ interface PanelState extends Omit<PanelResult, "ref"> {
 
 /** The epic or story id status is read for; null reads the default package. */
 type EpicRef = string | null;
-
-const COLUMN_WIDTHS = { story: 220, lane: 90, status: 110 } as const;
-
-function useStyles(theme: PluginWorkspacePanelProps["theme"], compact: boolean) {
-  return useMemo(
-    () => ({
-      screen: { flex: 1, backgroundColor: theme.colors.surface0 },
-      content: { padding: compact ? 12 : 20, gap: compact ? 10 : 14 },
-      line: { flexDirection: "row" as const, flexWrap: "wrap" as const, columnGap: 16, rowGap: 4 },
-      title: { color: theme.colors.foreground, fontSize: compact ? 15 : 16, fontWeight: "600" as const },
-      text: { color: theme.colors.foreground },
-      muted: { color: theme.colors.foregroundMuted },
-      row: { flexDirection: "row" as const, gap: 8 },
-      stackedRow: { gap: 2 },
-      actions: {
-        flexDirection: compact ? ("column" as const) : ("row" as const),
-        alignItems: compact ? ("stretch" as const) : ("center" as const),
-        flexWrap: "wrap" as const,
-        gap: 10,
-      },
-      button: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, backgroundColor: theme.colors.accent },
-      buttonText: { color: theme.colors.accentForeground, textAlign: "center" as const },
-      result: { gap: 4 },
-      link: { color: theme.colors.foreground, textDecorationLine: "underline" as const },
-    }),
-    [theme, compact],
-  );
-}
 
 export function EpicPanel({ theme, layout, workspaceId, navigation }: PluginWorkspacePanelProps) {
   const dir = useWorkspace(workspaceId, (w) => w.directory);
@@ -50,6 +25,7 @@ export function EpicPanel({ theme, layout, workspaceId, navigation }: PluginWork
   const readStatus = useRpc(statusRpc);
   const check = useRpc(checkRpc);
   const next = useRpc(nextRpc);
+  const storyChanges = useRpc(storyChangesRpc);
   const epicRef = useRef<EpicRef>(null);
   // Loads can overlap (a command result while a button's load runs); only the
   // newest one may set the state.
@@ -96,6 +72,63 @@ export function EpicPanel({ theme, layout, workspaceId, navigation }: PluginWork
     });
   }, [dir, load]);
 
+  const [expanded, setExpanded] = useState<Set<StoryId>>(() => new Set());
+  const [rowStates, setRowStates] = useState<Map<StoryId, RowState>>(() => new Map());
+  // Each row load takes a fresh number from rowSeqNext; only the row's newest
+  // load may land. Clearing rowSeq drops every load still in flight.
+  const rowSeq = useRef(new Map<StoryId, number>());
+  const rowSeqNext = useRef(0);
+
+  const loadRow = useCallback(
+    async (story: StoryId) => {
+      if (!dir) return;
+      const seq = ++rowSeqNext.current;
+      rowSeq.current.set(story, seq);
+      const settle = (next: (prev: RowState | undefined) => RowState) => {
+        if (rowSeq.current.get(story) === seq) {
+          setRowStates((prev) => new Map(prev).set(story, next(prev.get(story))));
+        }
+      };
+      setRowStates((prev) => new Map(prev).set(story, { phase: "loading", data: prev.get(story)?.data }));
+      try {
+        const data = await storyChanges({ workspaceDir: dir, story });
+        settle(() => ({ phase: "ready", data }));
+      } catch (err) {
+        // A failed Refresh keeps the row's previous data under the error.
+        settle((prev) => ({ phase: "error", error: errorText(err), data: prev?.data }));
+      }
+    },
+    [dir, storyChanges],
+  );
+
+  // Once per workspace and epic: open the in-progress row, else the Next row.
+  // A status reload of the same epic keeps the open rows and their data.
+  const status = state.status;
+  const expandedFor = useRef("");
+  useEffect(() => {
+    if (!status) return;
+    const key = `${dir}\n${status.epic}`;
+    if (key === expandedFor.current) return;
+    expandedFor.current = key;
+    rowSeq.current.clear();
+    setRowStates(new Map());
+    const first = status.rows.find((r) => r.status === "in_progress") ?? status.rows.find((r) => r.id === status.next);
+    setExpanded(new Set(first ? [first.id] : []));
+    if (first) void loadRow(first.id);
+  }, [dir, status, loadRow]);
+
+  const toggle = (story: StoryId) => {
+    const open = !expanded.has(story);
+    setExpanded((prev) => {
+      const set = new Set(prev);
+      if (open) set.add(story);
+      else set.delete(story);
+      return set;
+    });
+    const row = rowStates.get(story);
+    if (open && !row?.data && row?.phase !== "loading") void loadRow(story);
+  };
+
   const press = useCallback(
     async (action: () => Promise<PanelResult>) => {
       setBusy(true);
@@ -127,7 +160,6 @@ export function EpicPanel({ theme, layout, workspaceId, navigation }: PluginWork
     );
   }
 
-  const { status } = state;
   const problems = state.problems ?? status?.problems;
   const openPr = status?.openPr;
   const openBrowser = navigation?.openBrowser;
@@ -137,17 +169,18 @@ export function EpicPanel({ theme, layout, workspaceId, navigation }: PluginWork
       {state.phase === "no-epic" ? <Text style={styles.text}>{labels.noEpic}</Text> : null}
       {status ? (
         <>
-          <View style={styles.line}>
-            <Text style={styles.title}>{`${status.epic} — ${status.title}`}</Text>
-            <Text style={styles.muted}>{`branch ${status.epicBranch}`}</Text>
-            {status.behind === null ? null : <Text style={styles.muted}>{`${status.behind} behind base`}</Text>}
-          </View>
-          <View style={styles.line}>
-            <Text style={styles.text}>{`State ${status.state}`}</Text>
-            <Text style={styles.text}>{`Stories ${status.stories}`}</Text>
-            <Text style={styles.text}>{`Next ${status.next}`}</Text>
-          </View>
-          <StoryTable rows={status.rows} compact={layout.compact} styles={styles} />
+          <PanelHeader status={status} styles={styles} />
+          <StoryList
+            rows={status.rows}
+            expanded={expanded}
+            rowStates={rowStates}
+            onToggle={toggle}
+            onRefresh={(story) => void loadRow(story)}
+            navigation={navigation}
+            workspaceId={workspaceId}
+            compact={layout.compact}
+            styles={styles}
+          />
         </>
       ) : null}
       {state.phase === "no-epic" ? null : (
@@ -195,9 +228,6 @@ export function EpicPanel({ theme, layout, workspaceId, navigation }: PluginWork
   );
 }
 
-type UseStyles = typeof useStyles;
-type Styles = ReturnType<UseStyles>;
-
 function ActionButton(props: { label: string; busy: boolean; onPress: () => void; styles: Styles }) {
   const { label, busy, onPress, styles } = props;
   return (
@@ -211,52 +241,5 @@ function ActionButton(props: { label: string; busy: boolean; onPress: () => void
     >
       <Text style={styles.buttonText}>{label}</Text>
     </Pressable>
-  );
-}
-
-function StoryTable({ rows, compact, styles }: { rows: Status["rows"]; compact: boolean; styles: Styles }) {
-  if (rows.length === 0) return <Text style={styles.muted}>{labels.noStories}</Text>;
-  if (compact) {
-    // Narrow screens: one block per story, the lane, status and date on a second line.
-    return (
-      <View style={{ gap: 8 }}>
-        {rows.map((r) => (
-          <View key={r.id} style={styles.stackedRow}>
-            <Text style={styles.text}>{`${r.id} ${r.title}`}</Text>
-            <Text style={styles.muted}>{[r.lane, r.status, r.done].filter(Boolean).join(" · ")}</Text>
-          </View>
-        ))}
-      </View>
-    );
-  }
-  const c = labels.columns;
-  return (
-    <View style={{ gap: 4 }}>
-      <TableRow cells={[c.story, c.lane, c.status, c.done]} textStyle={styles.muted} styles={styles} />
-      {rows.map((r) => (
-        <TableRow key={r.id} cells={[`${r.id} ${r.title}`, r.lane, r.status, r.done]} textStyle={styles.text} styles={styles} />
-      ))}
-    </View>
-  );
-}
-
-function TableRow(props: { cells: [string, string, string, string]; textStyle: { color: string }; styles: Styles }) {
-  const { cells, textStyle, styles } = props;
-  const [story, lane, status, done] = cells;
-  return (
-    <View style={styles.row}>
-      <Text numberOfLines={1} style={[textStyle, { width: COLUMN_WIDTHS.story }]}>
-        {story}
-      </Text>
-      <Text numberOfLines={1} style={[textStyle, { width: COLUMN_WIDTHS.lane }]}>
-        {lane}
-      </Text>
-      <Text numberOfLines={1} style={[textStyle, { width: COLUMN_WIDTHS.status }]}>
-        {status}
-      </Text>
-      <Text numberOfLines={1} style={[textStyle, { flex: 1 }]}>
-        {done}
-      </Text>
-    </View>
   );
 }

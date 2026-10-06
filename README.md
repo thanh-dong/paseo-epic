@@ -61,7 +61,7 @@ Three kinds of caller use the plugin:
 
 | Caller | What it uses |
 | --- | --- |
-| You (human) | The **Epic** workspace panel, the `/epic <verb> [id]` slash command, and the Command Center item **Epic: start next story** |
+| You (human) | The **Epic** workspace panel (it also opens the story's workspace and agent), the `/epic <verb> [id]` slash command, and the Command Center item **Epic: start next story** |
 | The agent | The seven `epic_*` tools of the `epic` MCP server |
 | The plugin itself | An `agent.create` hook that adds the `epic` MCP server to new agents in a repo with `.epic.yml` or an epic package, and an `agent.turn_ended` hook that spawns the next story's agent after `epic_next` |
 
@@ -195,6 +195,55 @@ branch, the story table, the next story, and the open PR with its link. It
 has two buttons: **Check** and **Start next story**. It reads the package
 when it opens, after a button press, and after an `/epic` command result. It
 does not refresh on a timer.
+
+Each story row opens and closes when you press it. A chevron shows whether
+it is open. A colored dot shows the status: the accent color for
+`in_progress`, the normal text color for `implemented`, and the muted color
+for `planned` and `dropped`. The first time the panel shows an epic, the
+`in_progress` row starts open; when no row is in progress, the next story's
+row does.
+
+An open row shows, from top to bottom:
+
+- **Refresh**: reads the row again.
+- `workspace <name>` and an **Open workspace** button.
+- `agent <title> (<status>)` and an **Open agent** button.
+- `PR` and the story PR as a link, for example `#296 (open)`. When the app
+  cannot open links, the number and the URL show as text. Without a PR, the
+  row's Done text, or `none yet`.
+- `changes vs <base>: <n> files, <m> uncommitted`, then one line per file:
+  the status letter (`A`, `M`, `D` or `R`), the path, and an `uncommitted`
+  tag when the change is not committed yet. Paths are selectable text.
+- A note when the plugin finds no workspace for the story, or more than one.
+
+The buttons appear only when your Paseo app supports navigation from a
+panel; older apps show the names as text.
+
+The panel lists the epics in its own checkout, so open it in a workspace on
+the epic branch or on one of its story branches, or in the story's worktree.
+
+The panel looks in its own Paseo project for the workspace and the agent,
+and asks `gh` for the PR:
+
+- The workspace whose current branch is the story branch
+  (`<branchPrefix><story>-...`). When the panel's own workspace is on that
+  branch, it wins.
+- The newest open agent with the label `epic.story` set to the story; else
+  the newest open agent whose working directory is in that workspace.
+- The PR through `gh`: the open PR into the epic branch first; for an
+  `implemented` row, the merged one. Without `gh` there is no PR link.
+
+The file list is read in the story's worktree, not in the panel's checkout.
+It holds the files committed since the story branch left the epic branch
+(`git diff --name-status origin/<epic>...HEAD`) plus the uncommitted and
+untracked files (`git status --porcelain --untracked-files=all`). The panel
+does not fetch, so `origin/<epic>` is the epic branch as last fetched. A row
+loads the first time you open it and again when you press **Refresh**; it
+does not refresh on a timer. Errors show inside the open row.
+
+Review flow: open the Epic panel in a workspace whose checkout holds the epic
+package (see above), open the story's row, press **Open workspace**, and
+review the change in Paseo's Diff tab.
 
 ### `.epic.yml`
 

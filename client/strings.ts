@@ -47,4 +47,19 @@ export const labels = {
   waitingForMerge: "waiting for merge",
   lastCheckOk: "Last check: ok",
   lastCheckProblems: "Last check: problems",
+  refresh: "Refresh",
+  openWorkspace: "Open workspace",
+  openAgent: "Open agent",
+  workspace: "workspace",
+  agent: "agent",
+  pr: "PR",
+  noPr: "none yet",
+  uncommitted: "uncommitted",
+  noChanges: "No changes yet.",
+  loadingRow: "Reading the story…",
 } as const;
+
+/** The heading of a story's changed-file list. */
+export function changesVs(base: string, files: number, uncommitted: number): string {
+  return `changes vs ${base}: ${files} files, ${uncommitted} uncommitted`;
+}

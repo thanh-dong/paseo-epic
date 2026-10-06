@@ -93,6 +93,27 @@ const nextSpawnResultSchema = z.object({
   message: z.string(),
 });
 
+const storyChangesResultSchema = z.object({
+  story: z.string(),
+  title: z.string(),
+  status: z.string(),
+  done: z.string(),
+  workspace: z.object({ id: z.string(), directory: z.string(), name: z.string() }).nullable(),
+  agent: z.object({ id: z.string(), title: z.string().nullable(), status: z.string() }).nullable(),
+  pr: z.object({ number: z.number(), url: z.string(), state: z.enum(["open", "merged"]) }).nullable(),
+  changes: z
+    .object({
+      base: z.string(),
+      head: z.string(),
+      ahead: z.number(),
+      files: z.array(
+        z.object({ path: z.string(), status: z.enum(["A", "M", "D", "R"]), committed: z.boolean() }),
+      ),
+    })
+    .nullable(),
+  note: z.string().nullable(),
+});
+
 export const statusRpc = defineRpc({
   name: "epic.status",
   input: z.object({ workspaceDir, ref: z.string().optional() }),
@@ -133,4 +154,10 @@ export const isEpicRpc = defineRpc({
   name: "epic.is-epic",
   input: z.object({ workspaceDir }),
   output: z.object({ epic: z.boolean() }),
+});
+
+export const storyChangesRpc = defineRpc({
+  name: "epic.story-changes",
+  input: z.object({ workspaceDir, story: z.string() }),
+  output: storyChangesResultSchema,
 });
