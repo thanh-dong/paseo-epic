@@ -73,6 +73,16 @@ test("a merge of main into the epic does not pollute the story's list", async ()
   expect(out.files).toEqual([]);
 });
 
+test("a base file renamed in a commit and edited again stays renamed", async () => {
+  await git(fx.root, "mv", "docs/templates/epic.md", "docs/templates/epic-renamed.md");
+  await git(fx.root, "commit", "-q", "-m", "rename epic template");
+  writeFileSync(join(fx.root, "docs", "templates", "epic-renamed.md"), "edited after the rename\n", { flag: "a" });
+
+  const out = await storyChanges(fx.root, EPIC);
+  expect(out.ahead).toBe(1);
+  expect(out.files).toEqual([{ path: "docs/templates/epic-renamed.md", status: "R", committed: false }]);
+});
+
 test("refuses when the epic branch is not on the remote", async () => {
   await expect(storyChanges(fx.root, "epic/E1-missing")).rejects.toThrow(
     "origin/epic/E1-missing does not exist; push the epic branch first",
