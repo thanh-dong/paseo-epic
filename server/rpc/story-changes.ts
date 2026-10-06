@@ -93,7 +93,8 @@ export async function resolveStoryChanges(
   const { root, story } = input;
   const config = loadConfig(root);
   if (!STORY_ID_RE.test(story)) throw new EpicError(`\`${story}\` is not a story id like TH-652; check the story id`);
-  const unknown = `no epic package lists ${story}; check the story id`;
+  const unknown =
+    `no epic package lists ${story} in this checkout; check out the epic branch or a story branch, or open the panel in the story's worktree`;
   let dir: string;
   try {
     dir = findEpicDir(root, config, story);

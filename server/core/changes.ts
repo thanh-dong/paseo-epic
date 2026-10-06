@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { currentBranch, remoteBranchExists, run } from "./git";
 import { EpicError } from "./types";
 
@@ -66,6 +67,11 @@ export function parsePorcelain(out: string): UncommittedFile[] {
 
 /** The files a story worktree at `dir` changed against `origin/<epicBranch>`, committed or not. */
 export async function storyChanges(dir: string, epicBranch: string): Promise<StoryChanges> {
+  if (!existsSync(dir)) {
+    throw new EpicError(
+      `the story worktree ${dir} no longer exists; archive its workspace in Paseo or start the story again`,
+    );
+  }
   if (!(await remoteBranchExists(dir, epicBranch))) {
     throw new EpicError(`origin/${epicBranch} does not exist; push the epic branch first`);
   }

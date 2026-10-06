@@ -111,6 +111,13 @@ test("refuses when the epic branch is not on the remote", async () => {
   );
 });
 
+test("refuses when the story worktree no longer exists", async () => {
+  const gone = join(fx.root, "no-such-worktree");
+  await expect(storyChanges(gone, EPIC)).rejects.toThrow(
+    `the story worktree ${gone} no longer exists; archive its workspace in Paseo or start the story again`,
+  );
+});
+
 test("parsePorcelain and parseNameStatus handle renames and quoted paths", () => {
   expect(parseNameStatus("M\ta.ts\nR100\told.ts\tnew.ts\nA\tb.ts\n")).toEqual([
     { path: "a.ts", status: "M", committed: true },

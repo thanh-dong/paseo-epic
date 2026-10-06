@@ -275,6 +275,6 @@ test("an id that is not a story id refuses with the next step", async () => {
 test("unknown story refuses with the next step", async () => {
   const { deps } = fakeDeps({});
   await expect(resolveStoryChanges(deps, { root, story: "TH-999" })).rejects.toThrow(
-    "no epic package lists TH-999; check the story id",
+    "no epic package lists TH-999 in this checkout; check out the epic branch or a story branch, or open the panel in the story's worktree",
   );
 });
