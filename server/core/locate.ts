@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join, relative, sep } from "node:path";
-import type { EpicConfig } from "./config";
+import { type EpicConfig, hasConfigFile, loadConfig } from "./config";
 import { run, runRaw } from "./git";
 import { parseEpic, parseHandoff, splitLines } from "./parse";
 import { rowOf } from "./check";
@@ -28,6 +28,17 @@ export function subdirs(base: string): string[] {
 /** True when some package under `epicsDir` has an EPIC.md with the status markers. */
 export function isEpicRepo(root: string, config: EpicConfig): boolean {
   return subdirs(epicsDir(root, config)).some((d) => hasMarkers(d));
+}
+
+/**
+ * Should a new agent in this repo get the `epic` MCP server? Yes when the
+ * repo has `.epic.yml` (an epic can be started with `epic_init`) or already
+ * has an epic package. `loadConfig` runs first, so a broken `.epic.yml`
+ * throws here and the create hook skips the agent.
+ */
+export function wantsEpicTools(root: string): boolean {
+  const config = loadConfig(root);
+  return hasConfigFile(root) || isEpicRepo(root, config);
 }
 
 export function hasMarkers(dir: string): boolean {

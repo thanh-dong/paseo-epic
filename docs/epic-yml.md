@@ -3,6 +3,12 @@
 `.epic.yml` is an optional file at the root of your repo. Without it, the
 plugin uses the defaults below.
 
+Its presence alone matters too: a new agent in a repo with `.epic.yml` gets
+the `epic` MCP server even before any epic exists, so a planning agent can
+create the first epic with `epic_init`. Tools are added when an agent is
+created, so an agent created before you added the file must be replaced by a
+new one.
+
 **The plugin never executes anything from this file.** It only reads the
 values and quotes the hook text to agents. A shared repo cannot make the
 daemon run a command through it.

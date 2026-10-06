@@ -1,11 +1,11 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { beforeAll, expect, test } from "vitest";
-import { pendingLine } from "../server/core/text";
+import { afterInit, noEpicYet, pendingLine } from "../server/core/text";
 import { git, RemoteFixture } from "./fixtures";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
@@ -27,7 +27,15 @@ test("mcp server lists tools and answers epic_check", async () => {
     );
     try {
       const tools = (await client.listTools()).tools.map((t) => t.name).sort();
-      expect(tools).toEqual(["epic_check", "epic_close", "epic_close_check", "epic_next", "epic_start", "epic_status"]);
+      expect(tools).toEqual([
+        "epic_check",
+        "epic_close",
+        "epic_close_check",
+        "epic_init",
+        "epic_next",
+        "epic_start",
+        "epic_status",
+      ]);
 
       const check = (await client.callTool({ name: "epic_check", arguments: { epic: "E99" } })) as TextResult;
       expect(check.content[0].text).toContain("ok");
@@ -124,6 +132,77 @@ test("epic_close_check quotes the .epic.yml close hooks, with problems and when 
       fx.mark901Done(dir);
       const ready = await check();
       expect(ready).toEqual(["The package is ready to close. Call epic_close now.", hook]);
+    } finally {
+      await client.close();
+    }
+  } finally {
+    fx.teardown();
+  }
+});
+
+test("epic_init creates the package and its branch, and keeps cmdInit's refusals", async () => {
+  const fx = new RemoteFixture();
+  try {
+    await fx.setup();
+    const client = new Client({ name: "t", version: "0" });
+    await client.connect(
+      new StdioClientTransport({ command: process.execPath, args: ["mcp/epic-mcp.mjs", fx.root], cwd: repoRoot }),
+    );
+    try {
+      const init = async (epic: string, title: string) =>
+        (await client.callTool({ name: "epic_init", arguments: { epic, title } })) as TextResult;
+
+      const badId = await init("X1", "Search");
+      expect(badId.isError).toBe(true);
+      expect(badId.content[0].text).toBe("`X1` is not an epic id like E20");
+
+      // A tracked file with uncommitted changes: refused before any branch moves.
+      const tracked = join(fx.root, "docs", "templates", "epic.md");
+      appendFileSync(tracked, "\nlocal edit\n");
+      const dirty = await init("E8", "Dirty");
+      expect(dirty.isError).toBe(true);
+      expect(dirty.content[0].text).toBe("working tree has uncommitted changes; commit or stash them first");
+      expect((await git(fx.root, "rev-parse", "--abbrev-ref", "HEAD")).trim()).toBe("main");
+      await git(fx.root, "checkout", "--", tracked);
+
+      const created = await init("E7", "Search");
+      expect(created.isError).toBeFalsy();
+      const [json, next] = created.content[0].text.split("\n\n");
+      const result = JSON.parse(json);
+      const dir = join(fx.root, "docs", "stories", "epics", "E7-search");
+      expect(result).toEqual({ dir, branch: "epic/E7-search" });
+      expect(next).toBe(afterInit("epic/E7-search"));
+      expect(existsSync(join(dir, "EPIC.md"))).toBe(true);
+      expect(existsSync(join(dir, "HANDOFF.md"))).toBe(true);
+      expect((await git(fx.root, "rev-parse", "--abbrev-ref", "HEAD")).trim()).toBe("epic/E7-search");
+
+      const again = await init("E7", "Search");
+      expect(again.isError).toBe(true);
+      expect(again.content[0].text).toBe(`${join(dir, "EPIC.md")} already exists`);
+    } finally {
+      await client.close();
+    }
+  } finally {
+    fx.teardown();
+  }
+});
+
+test("epic_status on a repo with .epic.yml and no epic says to call epic_init", async () => {
+  const fx = new RemoteFixture();
+  try {
+    await fx.setup();
+    writeFileSync(join(fx.root, ".epic.yml"), "baseBranch: main\n");
+    const client = new Client({ name: "t", version: "0" });
+    await client.connect(
+      new StdioClientTransport({ command: process.execPath, args: ["mcp/epic-mcp.mjs", fx.root], cwd: repoRoot }),
+    );
+    try {
+      const out = (await client.callTool({ name: "epic_status", arguments: {} })) as TextResult;
+      expect(out.isError).toBeFalsy();
+      const [json, next] = out.content[0].text.split("\n\n");
+      expect(JSON.parse(json)).toEqual({ epic: null, epicsDir: "docs/stories/epics" });
+      expect(next).toBe(noEpicYet("docs/stories/epics"));
+      expect(next).toContain("Call epic_init");
     } finally {
       await client.close();
     }

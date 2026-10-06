@@ -17,7 +17,8 @@ what to do next.
 
 ## init
 
-`/epic init <epic> "<title>"`, for example `/epic init E1 "Search"`.
+`/epic init <epic> "<title>"`, for example `/epic init E1 "Search"`. An agent
+does the same with the `epic_init` tool (inputs `epic` and `title`).
 
 - The epic id looks like `E1`. The title is the rest of the line; quotes are
   optional.

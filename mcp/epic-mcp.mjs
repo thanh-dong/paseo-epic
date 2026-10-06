@@ -43811,8 +43811,8 @@ var StdioServerTransport = class {
 };
 
 // server/core/commands.ts
-import { existsSync as existsSync2, mkdirSync, writeFileSync } from "node:fs";
-import { basename as basename3, join as join2 } from "node:path";
+import { existsSync as existsSync4, mkdirSync, writeFileSync } from "node:fs";
+import { basename as basename3, join as join4 } from "node:path";
 
 // server/core/check.ts
 import { basename } from "node:path";
@@ -44171,21 +44171,64 @@ async function ghPrComments(root2, number4) {
 }
 
 // server/core/locate.ts
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { basename as basename2, join, relative, sep } from "node:path";
+import { existsSync as existsSync2, readdirSync, readFileSync as readFileSync2, statSync } from "node:fs";
+import { basename as basename2, join as join2, relative, sep } from "node:path";
+
+// server/core/config.ts
+var import_yaml = __toESM(require_dist2());
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+var CONFIG_FILE = ".epic.yml";
+var hooksSchema = external_exports.object({
+  start: external_exports.array(external_exports.string()).default([]),
+  close: external_exports.array(external_exports.string()).default([]),
+  nextPrompt: external_exports.string().optional()
+}).strict();
+var configSchema = external_exports.object({
+  epicsDir: external_exports.string().default("docs/stories/epics"),
+  templates: external_exports.string().optional(),
+  branchPrefix: external_exports.string().default("feat/"),
+  baseBranch: external_exports.string().default("main"),
+  profile: external_exports.string().optional(),
+  hooks: hooksSchema.default({ start: [], close: [] })
+}).strict();
+function loadConfig(root2) {
+  const file2 = join(root2, CONFIG_FILE);
+  let raw = {};
+  if (existsSync(file2)) {
+    try {
+      raw = (0, import_yaml.parse)(readFileSync(file2, "utf8")) ?? {};
+    } catch (err) {
+      throw new EpicError(`${CONFIG_FILE}: ${err.message}`);
+    }
+  }
+  const result = configSchema.safeParse(raw);
+  if (!result.success) {
+    const issue2 = result.error.issues[0];
+    const keys = issue2.code === "unrecognized_keys" ? issue2.keys : [];
+    const where = [...issue2.path, ...keys].map(String).join(".") || "(root)";
+    throw new EpicError(`${CONFIG_FILE}: ${where}: ${issue2.message}`);
+  }
+  return result.data;
+}
+
+// server/core/locate.ts
 function epicsDir(root2, config2) {
-  return join(root2, config2.epicsDir);
+  return join2(root2, config2.epicsDir);
 }
 function pyList(dirs) {
   return `[${dirs.map((d) => `'${basename2(d)}'`).join(", ")}]`;
 }
 function subdirs(base) {
-  if (!existsSync(base)) return [];
-  return readdirSync(base, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort().map((name) => join(base, name));
+  if (!existsSync2(base)) return [];
+  return readdirSync(base, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort().map((name) => join2(base, name));
+}
+function isEpicRepo(root2, config2) {
+  return subdirs(epicsDir(root2, config2)).some((d) => hasMarkers(d));
 }
 function hasMarkers(dir) {
-  const f = join(dir, "EPIC.md");
-  return existsSync(f) && readFileSync(f, "utf8").includes(STATUS_BEGIN);
+  const f = join2(dir, "EPIC.md");
+  return existsSync2(f) && readFileSync2(f, "utf8").includes(STATUS_BEGIN);
 }
 function findEpicDir(root2, config2, ref) {
   const base = epicsDir(root2, config2);
@@ -44200,8 +44243,8 @@ function findEpicDir(root2, config2, ref) {
   }
   if (STORY_ID_RE.test(ref)) {
     const hits = dirs.filter((d2) => {
-      const f = join(d2, "EPIC.md");
-      return existsSync(f) && rowOf(parseEpic(f, readFileSync(f, "utf8")), ref) !== void 0;
+      const f = join2(d2, "EPIC.md");
+      return existsSync2(f) && rowOf(parseEpic(f, readFileSync2(f, "utf8")), ref) !== void 0;
     });
     if (hits.length === 0) throw new EpicError(`no EPIC.md story list contains ${ref}`);
     if (hits.length > 1) {
@@ -44209,17 +44252,17 @@ function findEpicDir(root2, config2, ref) {
     }
     return hits[0];
   }
-  const d = join(base, ref);
-  if (existsSync(d) && statSync(d).isDirectory()) return d;
+  const d = join2(base, ref);
+  if (existsSync2(d) && statSync(d).isDirectory()) return d;
   throw new EpicError(`\`${ref}\` is not an epic id, a story id, or a folder under ${base}`);
 }
 function loadLocal(dir) {
-  const f = join(dir, "EPIC.md");
-  if (!existsSync(f)) throw new EpicError(`${f} missing (run \`init\`)`);
-  const h = join(dir, "HANDOFF.md");
+  const f = join2(dir, "EPIC.md");
+  if (!existsSync2(f)) throw new EpicError(`${f} missing (run \`init\`)`);
+  const h = join2(dir, "HANDOFF.md");
   return {
-    epic: parseEpic(f, readFileSync(f, "utf8")),
-    handoff: existsSync(h) ? parseHandoff(readFileSync(h, "utf8")) : null
+    epic: parseEpic(f, readFileSync2(f, "utf8")),
+    handoff: existsSync2(h) ? parseHandoff(readFileSync2(h, "utf8")) : null
   };
 }
 function gitRel(root2, dir) {
@@ -44231,7 +44274,7 @@ async function loadFromRef(root2, dir, ref) {
   if (!text) throw new EpicError(`${rel}/EPIC.md does not exist on ${ref}`);
   const r = await runRaw(["git", "show", `${ref}:${rel}/HANDOFF.md`], root2);
   return {
-    epic: parseEpic(join(dir, "EPIC.md"), text),
+    epic: parseEpic(join2(dir, "EPIC.md"), text),
     handoff: r.code === 0 ? parseHandoff(r.stdout) : null
   };
 }
@@ -44250,14 +44293,66 @@ function slugify2(text) {
   const s = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   return s.slice(0, 48).replace(/-+$/, "") || "story";
 }
+function today() {
+  const d = /* @__PURE__ */ new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+// server/core/templates.ts
+import { existsSync as existsSync3, readFileSync as readFileSync3 } from "node:fs";
+import { join as join3 } from "node:path";
+
+// server/core/default-templates.ts
+var DEFAULT_EPIC_TEMPLATE = '# ENN \u2014 Epic title\n\n<!--\n  Epic package template (docs/templates/epic.md). Create with\n  `python3 scripts/epic.py init ENN "Epic title"` \u2014 do not copy by hand.\n\n  Three sections are machine-read by scripts/epic.py; keep their shape:\n    ## Status      the block between the epic-status markers (rewritten whole)\n    ## Story list  the table; row order IS the build order; the first cell\n                   starts with the story id (`TH-652 Title`)\n    ## Ledger      one `### TH-652 \u2014 YYYY-MM-DD` entry per finished story,\n                   appended in the order stories closed\n  Everything else is planning content, mostly frozen after planning.\n  History never goes into ## Status. It goes into ## Ledger.\n  The brief for the next fresh session is HANDOFF.md next to this file.\n-->\n\n## Status\n\n<!-- epic-status:begin -->\nState: planned\nBranch: epic/ENN-slug\nStories: 0 of 0 implemented\nNext: none\n<!-- epic-status:end -->\n\n## Goal\n\nOne paragraph. What is true for the user when this epic is closed.\n\n## Source of truth\n\n- `design/\u2026` \u2014 the design agreed on YYYY-MM-DD.\n- Product docs this epic changes.\n\n## Design decisions\n\n| # | Decision | Where it lives |\n| --- | --- | --- |\n| 1 | | ADR / design file |\n\n## Scope\n\nIn scope:\n\n- \u2026\n\nOut of scope:\n\n- \u2026\n\n## Story list\n\nRow order is the build order. `Status` is one of `planned`, `in_progress`,\n`implemented`, `dropped`. `Done` is `YYYY-MM-DD PR #N` once implemented.\n\n| Story | Description | Lane | Status | Done |\n| --- | --- | --- | --- | --- |\n| TH-NNN Story title | What it builds, in one or two sentences. | normal | planned | |\n\n## Ledger\n\nOne entry per finished story, appended at `/epic close`, newest last. Fixed\nshape; the same facts feed `HANDOFF.md` \xA72.\n\n<!--\n### TH-NNN \u2014 YYYY-MM-DD\n\n- Branch / PR: `feat/TH-NNN-slug`, PR #N into `epic/ENN-slug`.\n- Shipped: `path/one.ts` (new \u2026), `path/two.ts` (changed \u2026).\n- Decisions: ADR TH-0NNN accepted with the story; \u2026\n- Deviations: what the plan said vs what shipped, and why.\n- Effects on later stories: TH-MMM row edited (\u2026); none.\n-->\n\n## Dependencies\n\n- Upstream: \u2026\n- Downstream: \u2026\n\n## Validation outline\n\n| Layer | Expected proof |\n| --- | --- |\n| Unit | |\n| Integration | |\n| E2E | |\n| Platform | |\n| Release | |\n\n## Open questions\n\n1. \u2026 (owned by TH-NNN)\n\n## Notes\n\nAnything that does not fit above.\n';
+var DEFAULT_HANDOFF_TEMPLATE = "# ENN handoff\n\n<!-- handoff: epic=ENN after=none next=none written=YYYY-MM-DD -->\n\n<!--\n  Handoff template (docs/templates/handoff.md). Rewritten WHOLE at every\n  `/epic close`; never appended. About one page. This is the only file a\n  fresh session needs to read before starting the next story; `/epic start`\n  prints it and refuses when the header's `next=` is not the story being\n  started or `after=` is not the last Ledger entry in EPIC.md.\n\n  Keep the five numbered headings. Use real paths, real symbol names, real\n  ADR ids. No \"see above\", no history \u2014 history lives in EPIC.md \xA7Ledger.\n-->\n\n## 1. Epic state\n\n- Epic: ENN \u2014 Epic title. Branch `epic/ENN-slug`, N commits behind `main`.\n- Stories: N of M implemented. Next: TH-NNN.\n- Open PR: none | #N (must be merged before the next story starts).\n\n## 2. Last story: what shipped\n\nStory: none yet \u2014 the epic was just planned. | TH-NNN Title, PR #N.\n\nOne short paragraph: what the story made true.\n\n| Path | Change |\n| --- | --- |\n| `apps/server/src/\u2026` | new: \u2026 |\n| `packages/api/src/\u2026` | changed: \u2026 |\n\n- New routes / functions / tables / migrations: `name` (`path`), \u2026\n- ADRs: TH-0NNN accepted with the story; \u2026\n- Deviations from the plan: \u2026 | none.\n- Tests added and how to run them:\n  ```\n  cd apps/server && bun run test src/\u2026/x.test.ts\n  ```\n- Environment: migrations `0NNN` applied to the dev database; seed \u2026; env \u2026\n\n## 3. Plan changes\n\n- TH-MMM row edited: \u2026 (why).\n- Open question N resolved: \u2026 | none.\n\n## 4. Next story brief\n\n- Story: TH-NNN Title. Packet: `docs/stories/epics/ENN-slug/TH-NNN-slug/`. Lane: normal.\n- Goal: \u2026\n- Builds on: `path` (`symbol`) from TH-PPP; \u2026\n- Acceptance criteria:\n  - \u2026\n- Constraints: intake gate first (`scripts/bin/harness-cli query matrix`);\n  lane rules; Inflow design system for any UI; ADRs inside the story are\n  accepted with it (TH-0193).\n- Read first: `docs/stories/epics/ENN-slug/EPIC.md` \xA7Design decisions,\n  `design/\u2026`, ADR \u2026\n- Build order: the pieces and which depends on which (input for the next\n  agent's own plan; not a working procedure).\n\n## 5. Gotchas\n\n- \u2026 (from implementation-notes.html and the trace of the last story)\n";
+
+// server/core/templates.ts
+var DEFAULTS = { "epic.md": DEFAULT_EPIC_TEMPLATE, "handoff.md": DEFAULT_HANDOFF_TEMPLATE };
+function templateText(root2, config2, name) {
+  if (config2.templates) {
+    const override = join3(root2, config2.templates, name);
+    if (existsSync3(override)) return readFileSync3(override, "utf8");
+  }
+  return DEFAULTS[name];
+}
 
 // server/core/commands.ts
 var STORY_BRANCH_RE = new RegExp(`^(${STORY_ID_BODY})-`);
 var DIRTY2 = "working tree has uncommitted changes; commit or stash them first";
+async function cmdInit(root2, config2, epicId, title, opts = {}) {
+  if (!EPIC_ID_RE.test(epicId)) throw new EpicError(`\`${epicId}\` is not an epic id like E20`);
+  const base = epicsDir(root2, config2);
+  mkdirSync(base, { recursive: true });
+  const existing = subdirs(base).filter((d2) => basename3(d2).split("-")[0] === epicId);
+  const d = existing[0] ?? join4(base, `${epicId}-${slugify2(title)}`);
+  const epicFile = join4(d, "EPIC.md");
+  if (existsSync4(epicFile)) throw new EpicError(`${epicFile} already exists`);
+  const name = basename3(d);
+  const branch = `epic/${name}`;
+  if (!opts.noGit) {
+    if (await gitDirty(root2)) throw new EpicError(DIRTY2);
+    await run(["git", "fetch", "origin", "--prune"], root2);
+    if (await localBranchExists(root2, branch)) {
+      await run(["git", "checkout", branch], root2);
+    } else if (await remoteBranchExists(root2, branch)) {
+      await run(["git", "checkout", "-b", branch, `origin/${branch}`], root2);
+    } else {
+      await run(["git", "checkout", "-b", branch, opts.fromRef ?? `origin/${config2.baseBranch}`], root2);
+    }
+  }
+  mkdirSync(d, { recursive: true });
+  const epicText = templateText(root2, config2, "epic.md").replaceAll("ENN-slug", () => name).replaceAll("# ENN \u2014 Epic title", () => `# ${epicId} \u2014 ${title}`).replaceAll("ENN", () => epicId);
+  const handoffText = templateText(root2, config2, "handoff.md").replaceAll("ENN-slug", () => name).replaceAll("ENN \u2014 Epic title", () => `${epicId} \u2014 ${title}`).replaceAll("ENN", () => epicId).replaceAll("written=YYYY-MM-DD", () => `written=${today()}`);
+  writeFileSync(epicFile, epicText);
+  writeFileSync(join4(d, "HANDOFF.md"), handoffText);
+  return { dir: d, branch };
+}
 async function cmdStart(root2, config2, ref, opts = {}) {
   if (!ref) throw new EpicError("start needs an epic id (E20) or a story id (TH-652)");
   const d = findEpicDir(root2, config2, ref);
-  const branch = existsSync2(join2(d, "EPIC.md")) ? epicBranch(loadLocal(d).epic) : `epic/${basename3(d)}`;
+  const branch = existsSync4(join4(d, "EPIC.md")) ? epicBranch(loadLocal(d).epic) : `epic/${basename3(d)}`;
   if (!opts.dryRun && await gitDirty(root2)) throw new EpicError(DIRTY2);
   await run(["git", "fetch", "origin", "--prune"], root2);
   if (!await remoteBranchExists(root2, branch)) {
@@ -44349,7 +44444,7 @@ function shellLine(cmd) {
 }
 async function writeBodyFile(root2, story2, text) {
   const gitDir = (await run(["git", "rev-parse", "--absolute-git-dir"], root2)).trim();
-  const f = join2(gitDir, `epic-pr-body-${story2}.md`);
+  const f = join4(gitDir, `epic-pr-body-${story2}.md`);
   writeFileSync(f, text);
   return f;
 }
@@ -44598,44 +44693,6 @@ async function cmdStatus(root2, config2, ref) {
   };
 }
 
-// server/core/config.ts
-var import_yaml = __toESM(require_dist2());
-import { existsSync as existsSync3, readFileSync as readFileSync2 } from "node:fs";
-import { join as join3 } from "node:path";
-var CONFIG_FILE = ".epic.yml";
-var hooksSchema = external_exports.object({
-  start: external_exports.array(external_exports.string()).default([]),
-  close: external_exports.array(external_exports.string()).default([]),
-  nextPrompt: external_exports.string().optional()
-}).strict();
-var configSchema = external_exports.object({
-  epicsDir: external_exports.string().default("docs/stories/epics"),
-  templates: external_exports.string().optional(),
-  branchPrefix: external_exports.string().default("feat/"),
-  baseBranch: external_exports.string().default("main"),
-  profile: external_exports.string().optional(),
-  hooks: hooksSchema.default({ start: [], close: [] })
-}).strict();
-function loadConfig(root2) {
-  const file2 = join3(root2, CONFIG_FILE);
-  let raw = {};
-  if (existsSync3(file2)) {
-    try {
-      raw = (0, import_yaml.parse)(readFileSync2(file2, "utf8")) ?? {};
-    } catch (err) {
-      throw new EpicError(`${CONFIG_FILE}: ${err.message}`);
-    }
-  }
-  const result = configSchema.safeParse(raw);
-  if (!result.success) {
-    const issue2 = result.error.issues[0];
-    const keys = issue2.code === "unrecognized_keys" ? issue2.keys : [];
-    const where = [...issue2.path, ...keys].map(String).join(".") || "(root)";
-    throw new EpicError(`${CONFIG_FILE}: ${where}: ${issue2.message}`);
-  }
-  return result.data;
-}
-
 // server/core/text.ts
 var PENDING_LINE_RE = new RegExp(
   `^Spawn pending for (${STORY_ID_BODY}) after (${STORY_ID_BODY}): the plugin starts the successor now\\.$`
@@ -44647,6 +44704,20 @@ function paragraph(parts) {
   return parts.filter((p) => p.length > 0).join(" ");
 }
 var NO_GH = "The PR and its comments were not read because `gh` was not available; check the PR by hand for answers to open questions.";
+function afterInit(branch) {
+  return paragraph([
+    `Created the epic package on branch ${branch}.`,
+    "Fill the story table and the Status block in EPIC.md, and HANDOFF.md for the first story.",
+    "Run epic_check until it reports ok, then commit and push the epic branch.",
+    "The first story starts in a fresh agent with epic_start; do not build it in this session."
+  ]);
+}
+function noEpicYet(epicsDir2) {
+  return paragraph([
+    `This repo has no epic yet: no EPIC.md under ${epicsDir2}.`,
+    "Call epic_init with an epic id like E1 and a title to create one."
+  ]);
+}
 function afterStart(hooks) {
   return paragraph([
     'This handoff is your context. Read the files under "Read first" and the story packet.',
@@ -44732,12 +44803,27 @@ server.registerTool(
     inputSchema: {}
   },
   () => answer(async () => {
-    const result = await cmdStatus(root, loadConfig(root));
+    const config2 = loadConfig(root);
+    if (!isEpicRepo(root, config2)) {
+      return { result: { epic: null, epicsDir: config2.epicsDir }, next: noEpicYet(config2.epicsDir) };
+    }
+    const result = await cmdStatus(root, config2);
     let next;
     if (result.problems.length > 0) next = "The package has problems. Fix the listed problems, then call epic_check.";
     else if (result.next === "none" || result.next === "") next = `${result.epic} has no open story.`;
     else next = `The next open story is ${result.next}. To begin it, call epic_start with ${result.next}.`;
     return { result, next };
+  })
+);
+server.registerTool(
+  "epic_init",
+  {
+    description: "Call to create a new epic: it checks out the epic branch from the base branch and writes EPIC.md and HANDOFF.md from the templates.",
+    inputSchema: { epic: external_exports.string(), title: external_exports.string() }
+  },
+  ({ epic, title }) => answer(async () => {
+    const result = await cmdInit(root, loadConfig(root), epic, title);
+    return { result, next: afterInit(result.branch) };
   })
 );
 server.registerTool(
