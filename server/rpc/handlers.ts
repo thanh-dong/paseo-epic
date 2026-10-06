@@ -7,6 +7,7 @@ import {
   nextRpc,
   startRpc,
   statusRpc,
+  storyChangesRpc,
 } from "../../shared/contracts";
 import { cmdCheck, cmdClose, cmdInit, cmdNext, cmdStart, cmdStatus } from "../core/commands";
 import { loadConfig } from "../core/config";
@@ -15,6 +16,7 @@ import { isEpicRepo } from "../core/locate";
 import { EpicError, type SpawnNext } from "../core/types";
 import type { PaseoApi } from "../sdk-types";
 import { createSpawnNext } from "./next";
+import { defaultDeps, resolveStoryChanges } from "./story-changes";
 
 /** Run `fn`; a refusal becomes a plain Error with the same text, so the client shows it inline. */
 async function refusalsAsErrors<T>(fn: () => T | Promise<T>): Promise<T> {
@@ -74,6 +76,9 @@ export function registerHandlers(
   );
   server.handle(nextRpc, ({ workspaceDir, story, ref }, { paseo }) =>
     refusalsAsErrors(() => deps.spawnNextFor(paseo)({ root: workspaceDir, story, ref })),
+  );
+  server.handle(storyChangesRpc, ({ workspaceDir, story }, { paseo }) =>
+    refusalsAsErrors(() => resolveStoryChanges(defaultDeps(paseo), { root: workspaceDir, story })),
   );
   server.handle(isEpicRpc, ({ workspaceDir }) =>
     refusalsAsErrors(() => ({ epic: isEpicRepo(workspaceDir, loadConfig(workspaceDir)) })),

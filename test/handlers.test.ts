@@ -1,0 +1,179 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, expect, test } from "vitest";
+import type { StoryChanges } from "../server/core/changes";
+import type { MergedPr } from "../server/core/git";
+import { resolveStoryChanges, type StoryChangesDeps } from "../server/rpc/story-changes";
+import { fill, makeRoot } from "./fixtures";
+
+type Workspace = Awaited<ReturnType<StoryChangesDeps["listWorkspaces"]>>[number];
+type Agent = Awaited<ReturnType<StoryChangesDeps["listAgents"]>>[number];
+type OpenPr = { number: number; title: string; headRefName: string; url: string };
+
+const CHANGES: StoryChanges = {
+  base: "origin/epic/E99-test-epic",
+  head: "feat/TH-902-second-thing",
+  ahead: 1,
+  files: [{ path: "two.ts", status: "A", committed: true }],
+};
+
+const WS_OTHER: Workspace = { id: "ws_1", directory: "/wt/other", name: "Other", branch: "main" };
+const WS_902: Workspace = {
+  id: "ws_2",
+  directory: "/wt/TH-902",
+  name: "TH-902 Second thing",
+  branch: "feat/TH-902-second-thing",
+};
+
+function agent(over: Partial<Agent> & { id: string }): Agent {
+  return { title: null, status: "idle", cwd: "/elsewhere", labels: {}, createdAt: "2026-10-06T10:00:00Z", ...over };
+}
+
+/** A fake with no git and no gh: `changes` returns CHANGES and records its arguments. */
+function fakeDeps(opts: {
+  workspaces?: Workspace[];
+  agents?: Agent[];
+  gh?: boolean;
+  openPrs?: OpenPr[];
+  mergedPrs?: MergedPr[];
+}) {
+  const calls: Array<[string, string]> = [];
+  const deps: StoryChangesDeps = {
+    listWorkspaces: async () => opts.workspaces ?? [],
+    listAgents: async () => opts.agents ?? [],
+    changes: async (dir, branch) => {
+      calls.push([dir, branch]);
+      return CHANGES;
+    },
+    gh: {
+      available: async () => opts.gh ?? false,
+      openPrs: async () => opts.openPrs ?? [],
+      mergedPrs: async () => opts.mergedPrs ?? [],
+    },
+  };
+  return { deps, calls };
+}
+
+let tmp = "";
+let root = "";
+
+beforeEach(async () => {
+  tmp = mkdtempSync(join(tmpdir(), "paseo-epic-rpc-"));
+  root = makeRoot(tmp);
+  await fill(root);
+});
+
+afterEach(() => {
+  rmSync(tmp, { recursive: true, force: true });
+});
+
+test("finds the workspace by branch and the agent by label", async () => {
+  const { deps, calls } = fakeDeps({
+    workspaces: [WS_OTHER, WS_902],
+    agents: [
+      agent({ id: "ag_old", cwd: "/wt/TH-902", createdAt: "2026-10-06T09:00:00Z" }),
+      agent({
+        id: "ag_new",
+        title: "TH-902 Second thing",
+        labels: { "epic.story": "TH-902" },
+        createdAt: "2026-10-06T11:00:00Z",
+      }),
+    ],
+  });
+  const out = await resolveStoryChanges(deps, { root, story: "TH-902" });
+  expect(out).toEqual({
+    story: "TH-902",
+    title: "Second thing",
+    status: "planned",
+    done: "",
+    workspace: { id: "ws_2", directory: "/wt/TH-902", name: "TH-902 Second thing" },
+    agent: { id: "ag_new", title: "TH-902 Second thing", status: "idle" },
+    pr: null,
+    changes: CHANGES,
+    note: null,
+  });
+  expect(calls).toEqual([["/wt/TH-902", "epic/E99-test-epic"]]);
+});
+
+test("falls back to the agent whose cwd is under the workspace", async () => {
+  const { deps } = fakeDeps({
+    workspaces: [WS_902],
+    agents: [
+      agent({ id: "ag_closed", status: "closed", cwd: "/wt/TH-902", createdAt: "2026-10-06T12:00:00Z" }),
+      agent({ id: "ag_under", cwd: "/wt/TH-902/apps", createdAt: "2026-10-06T10:00:00Z" }),
+      agent({ id: "ag_sibling", cwd: "/wt/TH-9020", createdAt: "2026-10-06T11:00:00Z" }),
+    ],
+  });
+  const out = await resolveStoryChanges(deps, { root, story: "TH-902" });
+  expect(out.agent).toEqual({ id: "ag_under", title: null, status: "idle" });
+});
+
+test("no workspace gives null fields and the note", async () => {
+  const { deps, calls } = fakeDeps({ workspaces: [WS_OTHER] });
+  const out = await resolveStoryChanges(deps, { root, story: "TH-902" });
+  expect(out.workspace).toBeNull();
+  expect(out.agent).toBeNull();
+  expect(out.changes).toBeNull();
+  expect(out.note).toBe("no workspace for TH-902 on this daemon");
+  expect(calls).toEqual([]);
+});
+
+test("a duplicate worktree on the branch picks the first and notes it", async () => {
+  const copy: Workspace = { ...WS_902, id: "ws_3", directory: "/wt/TH-902-copy", name: "TH-902 copy" };
+  const { deps, calls } = fakeDeps({ workspaces: [WS_OTHER, WS_902, copy] });
+  const out = await resolveStoryChanges(deps, { root, story: "TH-902" });
+  expect(out.workspace).toEqual({ id: "ws_2", directory: "/wt/TH-902", name: "TH-902 Second thing" });
+  expect(out.note).toBe("more than one workspace is on feat/TH-902-second-thing; showing TH-902 Second thing");
+  expect(calls).toEqual([["/wt/TH-902", "epic/E99-test-epic"]]);
+});
+
+test("open PR wins, merged PR only for implemented rows, none without gh", async () => {
+  const open: OpenPr = {
+    number: 7,
+    title: "TH-902",
+    headRefName: "feat/TH-902-second-thing",
+    url: "https://github.com/o/r/pull/7",
+  };
+  const merged: MergedPr[] = [
+    {
+      number: 1,
+      url: "https://github.com/o/r/pull/1",
+      headRefName: "feat/TH-901-first-thing",
+      mergedAt: "2026-09-06T00:00:00Z",
+      title: "TH-901",
+    },
+    {
+      number: 5,
+      url: "https://github.com/o/r/pull/5",
+      headRefName: "feat/TH-902-second-thing",
+      mergedAt: "2026-09-07T00:00:00Z",
+      title: "TH-902",
+    },
+  ];
+
+  const withOpen = fakeDeps({ gh: true, openPrs: [open], mergedPrs: merged });
+  expect((await resolveStoryChanges(withOpen.deps, { root, story: "TH-902" })).pr).toEqual({
+    number: 7,
+    url: "https://github.com/o/r/pull/7",
+    state: "open",
+  });
+
+  const noOpen = fakeDeps({ gh: true, openPrs: [], mergedPrs: merged });
+  expect((await resolveStoryChanges(noOpen.deps, { root, story: "TH-901" })).pr).toEqual({
+    number: 1,
+    url: "https://github.com/o/r/pull/1",
+    state: "merged",
+  });
+  expect((await resolveStoryChanges(noOpen.deps, { root, story: "TH-902" })).pr).toBeNull();
+
+  const noGh = fakeDeps({ gh: false, openPrs: [open], mergedPrs: merged });
+  expect((await resolveStoryChanges(noGh.deps, { root, story: "TH-902" })).pr).toBeNull();
+});
+
+test("unknown story refuses with the next step", async () => {
+  const { deps } = fakeDeps({});
+  await expect(resolveStoryChanges(deps, { root, story: "TH-999" })).rejects.toThrow(
+    "no epic package lists TH-999; check the story id",
+  );
+});
