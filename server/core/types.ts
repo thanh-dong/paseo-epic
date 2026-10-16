@@ -16,7 +16,8 @@ export const OPEN_ROW: readonly string[] = ["planned", "in_progress"];
 export const HANDOFF_HEADINGS: readonly string[] = ["## 1.", "## 2.", "## 3.", "## 4.", "## 5."];
 
 export const EPIC_ID_RE = /^E\d+$/;
-export const STORY_ID_RE = /^[A-Z]{2,}-\d+$/;
+/** `TH-652`, or scoped to an epic: `TH-E09-3` (the counter restarts per epic, so parallel epics cannot collide). */
+export const STORY_ID_RE = /^[A-Z]{2,}-(?:E\d+-)?\d+$/;
 /** The story id pattern without its anchors, to build larger patterns from. */
 export const STORY_ID_BODY = STORY_ID_RE.source.slice(1, -1);
 export const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;

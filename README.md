@@ -146,7 +146,9 @@ it gives you the commands to run by hand.
    A fresh agent starts `TH-2` in a new worktree.
 
 Epic ids look like `E1`. Story ids look like `TH-1` (two or more capital
-letters, a dash, a number).
+letters, a dash, a number). A story id can also carry its epic, like
+`TH-E9-1`. Then the number counts inside that epic, so two epics that run at
+the same time on two branches cannot pick the same id.
 
 ## Usage reference
 
