@@ -43834,13 +43834,13 @@ var ROW_STATUSES = ["planned", "in_progress", "implemented", "dropped"];
 var OPEN_ROW = ["planned", "in_progress"];
 var HANDOFF_HEADINGS = ["## 1.", "## 2.", "## 3.", "## 4.", "## 5."];
 var EPIC_ID_RE = /^E\d+$/;
-var STORY_ID_RE = /^[A-Z]{2,}-\d+$/;
+var STORY_ID_RE = /^[A-Z]{2,}-(?:E\d+-)?\d+$/;
 var STORY_ID_BODY = STORY_ID_RE.source.slice(1, -1);
 var DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 // server/core/parse.ts
 var H1_RE = /^#\s+(E\d+)\s*[—–-]\s*(.+?)\s*$/m;
-var LEDGER_RE = /^###\s+([A-Z]{2,}-\d+)\s*[—–-]\s*(\S+)/;
+var LEDGER_RE = new RegExp(`^###\\s+(${STORY_ID_BODY})\\s*[\u2014\u2013-]\\s*(\\S+)`);
 var HANDOFF_RE = /<!--\s*handoff:\s*epic=(\S+)\s+after=(\S+)\s+next=(\S+)\s+written=(\S+)\s*-->/;
 function splitLines(text) {
   const lines = text.split(/\r\n|[\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029]/);

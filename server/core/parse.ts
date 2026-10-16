@@ -5,11 +5,12 @@ import {
   type Row,
   STATUS_BEGIN,
   STATUS_END,
+  STORY_ID_BODY,
   STORY_ID_RE,
 } from "./types";
 
 const H1_RE = /^#\s+(E\d+)\s*[—–-]\s*(.+?)\s*$/m;
-const LEDGER_RE = /^###\s+([A-Z]{2,}-\d+)\s*[—–-]\s*(\S+)/;
+const LEDGER_RE = new RegExp(`^###\\s+(${STORY_ID_BODY})\\s*[—–-]\\s*(\\S+)`);
 const HANDOFF_RE = /<!--\s*handoff:\s*epic=(\S+)\s+after=(\S+)\s+next=(\S+)\s+written=(\S+)\s*-->/;
 
 /** Python's str.splitlines(): no trailing empty element, "" gives []. */
