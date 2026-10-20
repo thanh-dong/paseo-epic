@@ -17,6 +17,8 @@ function fakeClient() {
     addWorkspacePanel: record("panel"),
     addSlashCommand: record("slash"),
     addCommandCenterItem: record("command"),
+    // The header buttons wait for a workspace list that never comes.
+    paseo: { workspaces: { list: () => new Promise(() => {}) } },
   };
   return { client, added };
 }

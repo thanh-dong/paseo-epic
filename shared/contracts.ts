@@ -149,3 +149,10 @@ export const storyChangesRpc = defineRpc({
   input: z.object({ workspaceDir, story: z.string() }),
   output: storyChangesResultSchema,
 });
+
+export const headerRpc = defineRpc({
+  name: "epic.header",
+  input: z.object({ workspaceDir }),
+  // null: the repo has neither `.epic.yml` nor an epic package, so no header button.
+  output: z.object({ epic: z.string().nullable(), next: z.string() }).nullable(),
+});

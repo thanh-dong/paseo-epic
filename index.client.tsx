@@ -5,13 +5,12 @@ import type {
 } from "@getpaseo/plugin/client";
 import { initRpc, nextRpc, statusRpc } from "./shared/contracts";
 import { EpicPanel } from "./client/EpicPanel";
+import { startHeaderButtons } from "./client/header";
 import { errorText, type PanelResult, postResult } from "./client/results";
-import { closeInstructions, noAgent, startInstructions, USAGE } from "./client/strings";
+import { closeInstructions, noAgent, PANEL_ID, startInstructions, USAGE } from "./client/strings";
 
 // Derived from the host SDK: `@getpaseo/client` is not installed on a production-only install.
 type PaseoApi = PluginCommandCapabilities["paseo"];
-
-const PANEL_ID = "epic";
 
 // The hint is the word verb in angle brackets, then [id]. The opening bracket
 // is escaped so the mobile audit's HTML-tag pattern does not match a string.
@@ -123,6 +122,7 @@ export default function contribute(client: PluginClientContext) {
           message: (await ctx.rpc(nextRpc, { workspaceDir: ctx.workspace.directory })).message,
         })),
     }),
+    startHeaderButtons(client),
   ];
   return () => {
     for (const cleanup of cleanups) cleanup();

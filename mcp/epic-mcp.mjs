@@ -43814,9 +43814,10 @@ var StdioServerTransport = class {
 import { existsSync as existsSync4, mkdirSync, writeFileSync } from "node:fs";
 import { basename as basename3, join as join4 } from "node:path";
 
-// server/core/git.ts
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+// server/core/config.ts
+var import_yaml = __toESM(require_dist2());
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 
 // server/core/types.ts
 var EpicError = class extends Error {
@@ -43828,7 +43829,46 @@ var EpicError = class extends Error {
 var STATUS_BEGIN = "<!-- epic-status:begin -->";
 var STATUS_END = "<!-- epic-status:end -->";
 
+// server/core/config.ts
+var CONFIG_FILE = ".epic.yml";
+var hooksSchema = external_exports.object({
+  init: external_exports.array(external_exports.string()).default([]),
+  start: external_exports.array(external_exports.string()).default([]),
+  close: external_exports.array(external_exports.string()).default([]),
+  nextPrompt: external_exports.string().optional()
+}).strict();
+var configSchema = external_exports.object({
+  epicsDir: external_exports.string().default("docs/stories/epics"),
+  templates: external_exports.string().optional(),
+  branchPrefix: external_exports.string().default("feat/"),
+  epicBranchPrefix: external_exports.string().default("epic/"),
+  baseBranch: external_exports.string().default("main"),
+  profile: external_exports.string().optional(),
+  hooks: hooksSchema.default({ init: [], start: [], close: [] })
+}).strict();
+function loadConfig(root2) {
+  const file2 = join(root2, CONFIG_FILE);
+  let raw = {};
+  if (existsSync(file2)) {
+    try {
+      raw = (0, import_yaml.parse)(readFileSync(file2, "utf8")) ?? {};
+    } catch (err) {
+      throw new EpicError(`${CONFIG_FILE}: ${err.message}`);
+    }
+  }
+  const result = configSchema.safeParse(raw);
+  if (!result.success) {
+    const issue2 = result.error.issues[0];
+    const keys = issue2.code === "unrecognized_keys" ? issue2.keys : [];
+    const where = [...issue2.path, ...keys].map(String).join(".") || "(root)";
+    throw new EpicError(`${CONFIG_FILE}: ${where}: ${issue2.message}`);
+  }
+  return result.data;
+}
+
 // server/core/git.ts
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 var execFileP = promisify(execFile);
 var MAX_BUFFER = 64 * 1024 * 1024;
 async function runRaw(cmd, cwd) {
@@ -43910,46 +43950,6 @@ async function ghPrComments(root2, number4) {
 // server/core/locate.ts
 import { existsSync as existsSync2, readdirSync, readFileSync as readFileSync2, statSync } from "node:fs";
 import { basename as basename2, join as join2, relative, sep } from "node:path";
-
-// server/core/config.ts
-var import_yaml = __toESM(require_dist2());
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-var CONFIG_FILE = ".epic.yml";
-var hooksSchema = external_exports.object({
-  init: external_exports.array(external_exports.string()).default([]),
-  start: external_exports.array(external_exports.string()).default([]),
-  close: external_exports.array(external_exports.string()).default([]),
-  nextPrompt: external_exports.string().optional()
-}).strict();
-var configSchema = external_exports.object({
-  epicsDir: external_exports.string().default("docs/stories/epics"),
-  templates: external_exports.string().optional(),
-  branchPrefix: external_exports.string().default("feat/"),
-  epicBranchPrefix: external_exports.string().default("epic/"),
-  baseBranch: external_exports.string().default("main"),
-  profile: external_exports.string().optional(),
-  hooks: hooksSchema.default({ init: [], start: [], close: [] })
-}).strict();
-function loadConfig(root2) {
-  const file2 = join(root2, CONFIG_FILE);
-  let raw = {};
-  if (existsSync(file2)) {
-    try {
-      raw = (0, import_yaml.parse)(readFileSync(file2, "utf8")) ?? {};
-    } catch (err) {
-      throw new EpicError(`${CONFIG_FILE}: ${err.message}`);
-    }
-  }
-  const result = configSchema.safeParse(raw);
-  if (!result.success) {
-    const issue2 = result.error.issues[0];
-    const keys = issue2.code === "unrecognized_keys" ? issue2.keys : [];
-    const where = [...issue2.path, ...keys].map(String).join(".") || "(root)";
-    throw new EpicError(`${CONFIG_FILE}: ${where}: ${issue2.message}`);
-  }
-  return result.data;
-}
 
 // server/core/parse.ts
 import { basename, dirname } from "node:path";

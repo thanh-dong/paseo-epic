@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import type { EpicConfig } from "./config";
+import { type EpicConfig, hasConfigFile } from "./config";
 import {
   currentBranch,
   ghAvailable,
@@ -21,12 +21,13 @@ import {
   findEpicDir,
   gitRel,
   hasMarkers,
+  isEpicRepo,
   loadFromRef,
   loadLocal,
   packetSlug,
   subdirs,
 } from "./locate";
-import { folderEpicId, ledgerEntry, rowOf, splitLines, storyOfName } from "./parse";
+import { folderEpicId, ledgerEntry, parseHandoff, rowOf, splitLines, storyOfName } from "./parse";
 import { slugify, today } from "./slug";
 import { templateText } from "./templates";
 import { type EpicPackage, EpicError, type Handoff, type Row } from "./types";
@@ -512,4 +513,28 @@ export async function cmdStatus(root: string, config: EpicConfig, ref?: string):
     openPr,
     closeHooks: config.hooks.close,
   };
+}
+
+export interface HeaderInfo {
+  /** The epic id of the package `status` shows; null when the repo has `.epic.yml` but no package yet. */
+  epic: string | null;
+  /** `next=` of the handoff on origin/<epic branch> when that ref exists, else the local one; "" without a header. */
+  next: string;
+}
+
+/**
+ * What the workspace header button shows for this checkout, or null when the
+ * repo has neither `.epic.yml` nor an epic package. It does not fetch.
+ */
+export async function headerInfo(root: string, config: EpicConfig): Promise<HeaderInfo | null> {
+  if (!isEpicRepo(root, config)) return hasConfigFile(root) ? { epic: null, next: "" } : null;
+  const d = await statusDir(root, config);
+  const branch = epicBranch(config, d);
+  const { epic, handoff: local } = loadLocal(d);
+  let handoff = local;
+  if (await remoteBranchExists(root, branch)) {
+    const r = await runRaw(["git", "show", `origin/${branch}:${gitRel(root, d)}/HANDOFF.md`], root);
+    handoff = r.code === 0 ? parseHandoff(r.stdout) : null;
+  }
+  return { epic: epic.id, next: handoff?.found ? handoff.next : "" };
 }

@@ -28,6 +28,19 @@ export function noAgent(verb: string): string {
   return `No agent in this workspace; create one, then run /epic ${verb} again.`;
 }
 
+/** The Epic panel's id. */
+export const PANEL_ID = "epic";
+/** The Epics overview screen's id. */
+export const OVERVIEW_ID = "epic-overview";
+
+/** The workspace header button and its menu. None of the items starts work. */
+export const headerLabels = {
+  title: "Epic",
+  openPanel: "Open Epic panel",
+  openExplorer: "Open in Explorer",
+  overview: "Epic overview",
+} as const;
+
 export const labels = {
   loading: "Reading the epic package…",
   noEpic: 'This workspace has no epic package. Create one with /epic init <epic> "<title>", or ask an agent to call epic_init.',
