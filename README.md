@@ -36,7 +36,8 @@ What the plugin gives you:
   branch and refuse when the flow cannot go on: a dirty tree, an epic branch
   that is not pushed, a handoff that names another story, a story that is
   not merged yet, or another story PR still open (checked when `gh` is
-  installed). `close` refuses off the story branch or with stray changes.
+  installed). `close` refuses off the story branch, with stray changes, or
+  when the handoff does not say `after=<story>` or still says `next=<story>`.
 - **Your rules stay yours.** The plugin checks no story ids and no file
   content. Your repo keeps its own rules and names them in `.epic.yml`
   hooks; the plugin quotes them to the agent at the right moment.

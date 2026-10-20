@@ -60,7 +60,8 @@ The plugin does four things:
   story PR, the draft epic PR, and finding the merged PR.
 - **Flow guards:** a clean tree, the epic branch pushed, no open story PR
   into the epic branch, the story branch checked out at close, no
-  uncommitted changes outside the epic folder at close, and the story merged
+  uncommitted changes outside the epic folder at close, a handoff that says
+  `after=<story>` and no longer `next=<story>` at close, and the story merged
   before `next`.
 - **Context:** it gives the agent `HANDOFF.md` and your `.epic.yml` hook
   text at the right moment.
@@ -169,6 +170,10 @@ Install only plugins whose source you have read.
 The full text the tools give the agent is in [routine.md](routine.md).
 
 ## The Epic panel
+
+The panel reads two status words from the story table: it opens an
+`in_progress` row first, and it shows a merged-PR link only for an
+`implemented` row. Any other status is shown as written.
 
 Press a story row to open it. The `in_progress` row starts open; when no row
 is in progress, the next story's row does. An open row shows:
@@ -312,9 +317,6 @@ do next.
 
 ## Limitations
 
-- The `/epic close` prompt from the client carries no `hooks.close` lines:
-  the client cannot read `.epic.yml`. The agent already got them from
-  `epic_start`.
 - Without the `gh` CLI, the plugin does not open PRs or read PR comments.
   `epic_close` returns the commands to run by hand, and `next` says the PR
   comments were not read.

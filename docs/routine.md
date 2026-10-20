@@ -32,8 +32,11 @@ flow cannot go on. Your repo owns its own rules and names them in the
 | Status block | the lines between `<!-- epic-status:begin -->` and `<!-- epic-status:end -->` | display only |
 | Ledger entry | `### <story> …` under `## Ledger` | the story PR body |
 
-Rows and ledger entries inside `<!-- -->` comment blocks are skipped. Any id
-shape works: `TH-1`, `TH-E10-1`, `story-7`, `ABC`. The epic id itself cannot
+Rows and ledger entries are read with every `<!-- … -->` span removed first
+(several per line, or across lines). An unclosed `<!--` hides the rest of the
+file, as markdown does. Any id shape works: `TH-1`, `TH-E10-1`, `story-7`,
+`ABC`. When one id is a prefix of another (`S` and `S-1`), a branch, PR head
+or packet folder `S-1-…` belongs to the longest id, `S-1`. The epic id itself cannot
 hold a `-`, because the id is the folder name before the first `-`.
 
 ## init
@@ -107,9 +110,9 @@ quoted. Typically the agent updates the story row and the ledger entry in
 `EPIC.md`, rewrites `HANDOFF.md` with `after=<story>` and the `next=` story,
 and runs the repo's own check. The plugin checks none of this.
 
-In Paseo you can also send the agent the close prompt. It is the close lines,
-then the call; the client cannot read `.epic.yml`, so from the client it is
-only the last line:
+In Paseo you can also send the agent the close prompt. It is the close lines
+(the client reads them from `.epic.yml` through the status RPC), then the
+call:
 
 ```
 <hooks.close lines, one per line>
@@ -118,9 +121,19 @@ Call epic_close with <story>.
 
 `epic_close` must run on the story branch. It refuses when:
 
-- the current branch is not `<branchPrefix><story>-…`;
+- the current branch is not `<branchPrefix><story>-…` (the longest row id
+  wins, so on `feat/S-1-x` the story is `S-1`, never `S`);
 - the local `HANDOFF.md` is missing or has no handoff header;
+- the header does not say `after=<story>`, or still says `next=<story>`.
+  The plugin reads these two fields itself, so they are flow state:
+
+  ```
+  HANDOFF.md says after=<id>; set after=<story> before epic_close
+  HANDOFF.md still says next=<story>; point next= at the following story or none
+  ```
 - there are uncommitted changes outside the epic folder.
+
+Nothing is written before these checks pass.
 
 Then it commits the epic folder, pushes, and opens the story PR into the
 epic branch, with the story's ledger entry as the PR body. When the local
@@ -148,7 +161,15 @@ next story** in the Command Center.
 
 `next` fetches `origin` and reads `HANDOFF.md` on `origin/<epic branch>`.
 The story counts as merged when that header says `after=<story>`. It
-refuses when the header is missing, or when it names another story:
+refuses when the header is missing, or when it names another story. When
+`after=` names a story that comes later in the table, a later story closed
+since:
+
+```
+<story> is not the last closed story on origin/<epic branch>; the handoff there says after=<id>, so run next <id>
+```
+
+Otherwise the story is not merged yet:
 
 ```
 <story> is not merged into origin/<epic branch> yet (the handoff there says after=<id>); merge the story PR first, then run next again
