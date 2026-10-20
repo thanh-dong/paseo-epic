@@ -22,13 +22,13 @@ chain short and honest:
 The plugin gives you:
 
 - An **Epic** workspace panel: the epic, its story table, the next story,
-  the open PR, and two buttons: **Check** and **Start next story**. A story
-  row opens to show the story's workspace and agent with **Open workspace**
-  and **Open agent** buttons, its PR link, and the files it changed.
-- A `/epic <verb> [id]` slash command. Verbs: `init`, `start`, `close`,
-  `next`, `check`, `status`.
+  the open PR, and a **Start next story** button. A story row opens to show
+  the story's workspace and agent with **Open workspace** and **Open agent**
+  buttons, its PR link, and the files it changed.
+- A `/epic <verb> [id]` slash command for you. Verbs: `init`, `start`,
+  `close`, `next`, `status`.
 - A Command Center item: **Epic: start next story**.
-- An `epic` MCP server with seven tools. The plugin adds it to every new
+- An `epic` MCP server with five tools. The plugin adds it to every new
   agent whose repo has `.epic.yml` or an epic package.
 
 A new agent gets the `epic` MCP server when its repo root has `.epic.yml`,
@@ -49,6 +49,32 @@ exists.
   +-------------------+          | git, gh         |        +-----------+
                                  +-----------------+
 ```
+
+## The plugin runs the flow; your repo owns the rules
+
+The plugin does four things:
+
+- **The flow:** init, start, close, next, status, and starting the next
+  story's agent.
+- **Git and PR work:** branches, the commit of the epic folder, push, the
+  story PR, the draft epic PR, and finding the merged PR.
+- **Flow guards:** a clean tree, the epic branch pushed, no open story PR
+  into the epic branch, the story branch checked out at close, no
+  uncommitted changes outside the epic folder at close, and the story merged
+  before `next`.
+- **Context:** it gives the agent `HANDOFF.md` and your `.epic.yml` hook
+  text at the right moment.
+
+It checks no story ids and no file content. Any id shape works (`TH-1`,
+`TH-E10-1`, `story-7`, `ABC`). The next story is the `HANDOFF.md` header's
+`next=`; the last closed story is its `after=`. The Status block in
+`EPIC.md` is shown as written.
+
+If your repo has rules (an id format, a ledger format, a script that checks
+the package), keep them in the repo and name them in the `.epic.yml` hooks.
+`hooks.init` is quoted after `epic_init`, `hooks.start` after `epic_start`,
+and `hooks.close` under "When the story is done:" after `epic_start`. See
+[epic-yml.md](epic-yml.md).
 
 ## Install
 
@@ -124,16 +150,18 @@ Install only plugins whose source you have read.
 
 ## The routine in five lines
 
-1. **init**: `/epic init E1 "Title"` creates the branch `epic/E1-<slug>` and
-   writes `EPIC.md` and `HANDOFF.md`. You plan the stories, then commit and
-   push the epic branch.
-2. **start**: `/epic start <story>` tells the agent to call `epic_start`. It
-   cuts the story branch from the epic tip and returns the handoff.
+1. **init**: an agent calls `epic_init` with an epic id and a title. It
+   creates the branch `epic/<epic>-<slug>` and writes `EPIC.md` and
+   `HANDOFF.md`. The agent fills in the stories and the first handoff
+   (`next=<first story>`), follows the `hooks.init` lines, then commits and
+   pushes the epic branch.
+2. **start**: a fresh agent calls `epic_start`. It cuts the story branch from
+   the epic tip and returns the handoff, the `hooks.start` lines and the
+   close steps.
 3. **build**: the agent builds the story as an ordinary task, in any way you
    like.
-4. **close**: `/epic close <story>`. The agent updates the story row, the
-   ledger, and `HANDOFF.md`, calls `epic_close_check` until it is ready, then
-   `epic_close`. That commits, pushes, and opens the story PR.
+4. **close**: the agent follows the close steps (your `hooks.close` lines),
+   then calls `epic_close`. That commits, pushes, and opens the story PR.
 5. **next**: you merge the PR, then reply `next` to the closing agent or
    press **Start next story**. The plugin starts a fresh agent for the next
    story in a new worktree.
@@ -155,9 +183,9 @@ is in progress, the next story's row does. An open row shows:
   `No changes yet.` when the list is empty.
 - A note when no workspace, or more than one, is on the story branch.
 
-The panel lists the epics in its own checkout. Inflow-style repos keep a
-package only on its epic branch, so open the panel in a workspace that is on
-the epic branch or on one of its story branches, or in the story's worktree.
+The panel lists the epics in its own checkout. Some repos keep a package
+only on its epic branch, so open the panel in a workspace that is on the
+epic branch or on one of its story branches, or in the story's worktree.
 
 For an open row the panel calls the RPC `epic.story-changes` with the story
 id. The RPC searches the workspaces and agents of the panel's own Paseo
@@ -170,12 +198,11 @@ through `gh` (open first; merged for an `implemented` row; none without
 `gh`). In the story's worktree it lists the files committed since the branch
 left the epic branch (`git diff --name-status origin/<epic>...HEAD`) and the
 uncommitted and untracked files (`git status --porcelain
---untracked-files=all`). It does not fetch. It refuses a bad story id and a
-story that no epic package in the panel's checkout lists. Once it has found
-the story's worktree, it also refuses a worktree directory that no longer
-exists and a missing `origin/<epic>` branch. The panel shows the refusal
-inside the row. A missing workspace, agent or PR is empty, not an
-error.
+--untracked-files=all`). It does not fetch. It refuses a story that is not a
+row of any epic package in the panel's checkout. Once it has found the
+story's worktree, it also refuses a worktree directory that no longer exists
+and a missing `origin/<epic>` branch. The panel shows the refusal inside the
+row. A missing workspace, agent or PR is empty, not an error.
 
 The row loads the first time you open it and again on **Refresh**. There is
 no timer.
@@ -192,13 +219,15 @@ review the change in Paseo's Diff tab.
 | Human replies `next` to the closing agent | agent calls `epic_next` | successor spawned |
 | Human presses the panel button | RPC `next` | successor spawned |
 
-The `/epic next [story]` command and the Command Center item **Epic: start
-next story** use the same RPC as the panel button.
+The Command Center item **Epic: start next story** uses the same RPC as the
+panel button. Without a story, the RPC runs `next` for the local handoff's
+`after=` story.
 
 **How the agent path spawns.** The MCP server has no access to the daemon
 SDK, so `epic_next` cannot start an agent itself. It does two things:
 
-1. It confirms the merge and names the next story.
+1. It confirms the merge (the handoff on the epic tip says `after=<story>`)
+   and names the next story (its `next=`).
 2. It starts its answer with the line
    `Spawn pending for <next story> after <closed story>: the plugin starts the successor now.`
 
@@ -208,21 +237,21 @@ PR comment that quotes it inside the JSON does not. The plugin runs `next`
 for the closed story, creates the worktree and the agent, and sends the
 result to the closing agent as a message. If the plugin finds a different
 next story than the line names, it does not report the spawn as done; it
-says `Spawn mismatch: ...` with the `/epic start` command to run by hand. If the turn does not end
-normally (for example, you cancel it), nothing is spawned. Press **Start
-next story** instead.
+says `Spawn mismatch: ...` and how to start the story by hand. If the turn
+does not end normally (for example, you cancel it), nothing is spawned.
+Press **Start next story** instead.
 
 ```
   you: "next"
       |
       v
-  closing agent --epic_next--> "Spawn pending for TH-2 after TH-1"
+  closing agent --epic_next--> "Spawn pending for S-2 after S-1"
       |
       v  turn ends
-  plugin hook --> new worktree feat/TH-2-<slug> + new agent
+  plugin hook --> new worktree feat/S-2-<slug> + new agent
       |
       v
-  closing agent gets: Started agent "TH-2 <title>" ...
+  closing agent gets: Started agent "S-2 <title>" ...
 ```
 
 The spawn is safe to repeat. Every workspace request carries the
@@ -231,10 +260,10 @@ story's branch checked out, the plugin starts nothing new and tells you
 where it is. If the branch exists locally but no workspace is on it, the
 new worktree checks that branch out instead of cutting a new one.
 
-The new agent's first prompt is `/epic start <story>`, then the
-conversation comments from the merged story PR (oldest first), then the
-`hooks.nextPrompt` text from `.epic.yml`. A comment whose author is not an
-owner, member or collaborator of the repo is marked
+The new agent's first prompt tells it to call `epic_start` with the story,
+then lists the conversation comments from the merged story PR (oldest
+first), then the `hooks.nextPrompt` text from `.epic.yml`. A comment whose
+author is not an owner, member or collaborator of the repo is marked
 `(untrusted, not a repo member)`.
 
 The new agent uses the launch profile named by `.epic.yml` `profile` (by id
@@ -249,25 +278,23 @@ anything from it. See [epic-yml.md](epic-yml.md).
 
 ## Agent tools
 
-The `epic` MCP server gives agents these seven tools. Each answer is the
+The `epic` MCP server gives agents these five tools. Each answer is the
 result as JSON, then a short "what to do now" paragraph.
 
 - `epic_init` (`epic`, `title`): checks out the epic branch and writes
-  `EPIC.md` and `HANDOFF.md`, like `/epic init`. Same refusals: a bad id, an
-  existing `EPIC.md`, a dirty tree.
+  `EPIC.md` and `HANDOFF.md`, then quotes the `hooks.init` lines. It refuses
+  an epic id that is empty or holds `-`, `/`, `\` or spaces, an existing
+  `EPIC.md`, and a dirty tree.
 - `epic_status` (no input): the epic package this repo is on: state, story
-  rows, next story, problems. In a repo with no epic yet it says so and
-  points to `epic_init`, without an error.
+  rows, next story. In a repo with no epic yet it says so and points to
+  `epic_init`, without an error.
 - `epic_start` (`story`): cuts the story branch from the epic tip and returns
-  the handoff, plus the `.epic.yml` `hooks.start` lines.
-- `epic_close_check` (`story`): lists what still stops the story from
-  closing.
+  the handoff, the `hooks.start` lines, and the close steps (the
+  `hooks.close` lines, then "Call epic_close with `<story>`").
 - `epic_close` (`story`): commits the epic folder, pushes, and opens the
   story PR.
 - `epic_next` (`story`, the closed story): confirms the merge and names the
   next story; the plugin then spawns it (see above).
-- `epic_check` (`epic`, optional): lints one epic package, or every package
-  when no epic id is given.
 
 A refusal comes back as an error result with one sentence that says what to
 do next.
@@ -280,18 +307,18 @@ do next.
 - Paseo Hub triggers or any webhook path.
 - A default method for building a story. Between `start` and `close` the
   agent works however the user likes. `.epic.yml` can add text, not rules.
+- Checking ids or file content. The repo owns those rules.
 - Running commands from `.epic.yml`. The plugin only quotes its text.
 
 ## Limitations
 
-- `.epic.yml` `hooks.close` lines are quoted by `epic_close_check`, after
-  its "what to do now" paragraph, one per line. The `/epic close` prompt
-  itself does not carry them. `hooks.start` is quoted by `epic_start`, and
-  `hooks.nextPrompt` ends the successor agent's first prompt.
+- The `/epic close` prompt from the client carries no `hooks.close` lines:
+  the client cannot read `.epic.yml`. The agent already got them from
+  `epic_start`.
 - Without the `gh` CLI, the plugin does not open PRs or read PR comments.
   `epic_close` returns the commands to run by hand, and `next` says the PR
   comments were not read.
 - The panel reads the package when it opens, after a button press, and after
-  an `/epic` command result. An open story row reads `epic.story-changes`
+  a slash command result. An open story row reads `epic.story-changes`
   when you open it and on **Refresh**. Nothing refreshes on a timer.
 - The npm package is not published yet.

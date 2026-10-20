@@ -32,37 +32,42 @@ What the plugin gives you:
   in the plan, the brief for the next story, and the traps it found.
 - **A fresh agent per story.** It starts from the merged handoff, not from a
   long chat history.
-- **Guard rails.** `start` and `next` read the package from the pushed epic
-  branch and refuse when it is stale or inconsistent: a dirty tree, a
-  failed check, the wrong next story, a handoff that points elsewhere, or
-  another story PR still open (checked when `gh` is installed).
+- **Flow guards.** `start` and `next` read the handoff from the pushed epic
+  branch and refuse when the flow cannot go on: a dirty tree, an epic branch
+  that is not pushed, a handoff that names another story, a story that is
+  not merged yet, or another story PR still open (checked when `gh` is
+  installed). `close` refuses off the story branch or with stray changes.
+- **Your rules stay yours.** The plugin checks no story ids and no file
+  content. Your repo keeps its own rules and names them in `.epic.yml`
+  hooks; the plugin quotes them to the agent at the right moment.
 - **One human touch per story.** You merge the PR and reply `next`.
   Everything else is the agent's job or the plugin's job.
 
 ## How it works
 
 ```
-  /epic init --> plan stories --> /epic start --> build --> /epic close
-                                       ^                         |
-                                       |                         v
-                          fresh agent, new worktree        story PR opened
-                                       ^                         |
-                                       |                         v
-                                 reply "next" <------------- you merge
+  epic_init --> plan stories --> epic_start --> build --> epic_close
+                                     ^                        |
+                                     |                        v
+                        fresh agent, new worktree       story PR opened
+                                     ^                        |
+                                     |                        v
+                               reply "next" <------------ you merge
 ```
 
-At close, the agent updates the story row and the ledger in `EPIC.md` and
-rewrites `HANDOFF.md`. `epic_close` commits, pushes, and opens the story PR
-into the epic branch. After you merge and reply `next`, the plugin creates a
-worktree on a new story branch and starts an agent there. Its first prompt is
-`/epic start <story>`, then the merged PR's conversation comments.
+At close, the agent follows your close steps (for example: update the story
+row and the ledger in `EPIC.md`, rewrite `HANDOFF.md`, run your repo's
+check). `epic_close` commits, pushes, and opens the story PR into the epic
+branch. After you merge and reply `next`, the plugin creates a worktree on a
+new story branch and starts an agent there. Its first prompt tells it to
+call `epic_start`, then lists the merged PR's conversation comments.
 
 Three kinds of caller use the plugin:
 
 | Caller | What it uses |
 | --- | --- |
 | You (human) | The **Epic** workspace panel (it also opens the story's workspace and agent), the `/epic <verb> [id]` slash command, and the Command Center item **Epic: start next story** |
-| The agent | The seven `epic_*` tools of the `epic` MCP server |
+| The agent | The five `epic_*` tools of the `epic` MCP server |
 | The plugin itself | An `agent.create` hook that adds the `epic` MCP server to new agents in a repo with `.epic.yml` or an epic package, and an `agent.turn_ended` hook that spawns the next story's agent after `epic_next` |
 
 > [!IMPORTANT]
@@ -129,39 +134,41 @@ it gives you the commands to run by hand.
 
 ## Quick start
 
-1. **Init.** `/epic init E1 "Search"` checks out `epic/E1-search` and writes
-   `EPIC.md` and `HANDOFF.md` under `docs/stories/epics/E1-search/`. A
-   planning agent can do the same with the `epic_init` tool, once the repo has
-   `.epic.yml`.
-2. **Plan.** Fill in the story table and the first handoff. Commit and push
-   the epic branch; `start` reads the package from `origin`.
-3. **Start.** `/epic start TH-1` tells the agent to call `epic_start`. It cuts
-   `feat/TH-1-<slug>` from the epic tip and returns the handoff.
+1. **Init.** A planning agent calls `epic_init` with an epic id and a title,
+   once the repo has `.epic.yml`. It checks out `epic/<epic>-<slug>` and
+   writes `EPIC.md` and `HANDOFF.md` under `docs/stories/epics/<epic>-<slug>/`.
+2. **Plan.** The agent fills in the story table and the first handoff (its
+   header says `next=<first story>`), follows your `hooks.init` lines, then
+   commits and pushes the epic branch; `start` reads the handoff from
+   `origin`.
+3. **Start.** A fresh agent calls `epic_start`. It cuts
+   `feat/<story>-<slug>` from the epic tip and returns the handoff, your
+   `hooks.start` lines, and the close steps.
 4. **Build.** The agent builds the story as an ordinary task, in any way you
    like. The plugin adds no method.
-5. **Close.** `/epic close TH-1`. The agent updates the row, the ledger and
-   the handoff, calls `epic_close_check` until it is ready, then `epic_close`.
+5. **Close.** The agent follows the close steps (your `hooks.close` lines),
+   writes the handoff for the next story, then calls `epic_close`.
 6. **Merge.** Review and merge the story PR on GitHub.
 7. **Next.** Reply `next` to the closing agent, or press **Start next story**.
-   A fresh agent starts `TH-2` in a new worktree.
+   A fresh agent starts the next story in a new worktree.
 
-Epic ids look like `E1`. Story ids look like `TH-1` (two or more capital
-letters, a dash, a number). A story id can also carry its epic, like
-`TH-E9-1`. Then the number counts inside that epic, so two epics that run at
-the same time on two branches cannot pick the same id.
+Ids are yours. The plugin takes any story id shape (`TH-1`, `TH-E10-1`,
+`story-7`, `ABC`). The epic id is the package folder name before the first
+`-`, so it cannot hold a `-`.
 
 ## Usage reference
 
-### `/epic` verbs
+### The `/epic` slash command
 
-| Command | What it does |
+For you, in the Paseo composer. Agents use the `epic_*` tools instead.
+
+| Verb | What it does |
 | --- | --- |
-| `/epic init <epic> "<title>"` | Checks out the epic branch and writes `EPIC.md` and `HANDOFF.md` from the templates. Needs a clean tree. Does not commit. |
-| `/epic start <story>` | Sends the newest open agent in the workspace the prompt to call `epic_start`. |
-| `/epic close <story>` | Sends the newest open agent the close instructions (row, ledger, handoff, then `epic_close_check` and `epic_close`). |
-| `/epic next [story]` | Confirms the merge and spawns the next story's agent. Same action as the panel button. |
-| `/epic check [id]` | Lints one package, or every package when no id is given. |
-| `/epic status [id]` | Opens the Epic panel. |
+| `init` | Same as `epic_init`. |
+| `start` | Sends the newest open agent in the workspace the prompt to call `epic_start`. |
+| `close` | Sends the newest open agent the prompt to call `epic_close`. |
+| `next` | Confirms the merge and spawns the next story's agent. Same action as the panel button. |
+| `status` | Opens the Epic panel. |
 
 ### Agent tools
 
@@ -182,21 +189,19 @@ A refusal is an error result with one sentence that says what to do next.
 
 | Tool | Input | Returns |
 | --- | --- | --- |
-| `epic_init` | `epic`, `title` | Checks out the epic branch and writes `EPIC.md` and `HANDOFF.md`, like `/epic init`. Refuses a bad id, an existing `EPIC.md`, or a dirty tree. |
-| `epic_status` | none | The epic package: state, story rows, next story, problems. With no epic yet, says to call `epic_init`. |
-| `epic_start` | `story` | Cuts the story branch from the epic tip; returns the handoff and the `hooks.start` lines. |
-| `epic_close_check` | `story` | What still stops the story from closing, then the `hooks.close` lines. Writes nothing. |
-| `epic_close` | `story` | Commits the epic folder, pushes, opens the story PR (and a draft epic PR after the last story). |
+| `epic_init` | `epic`, `title` | Checks out the epic branch and writes `EPIC.md` and `HANDOFF.md`, then quotes the `hooks.init` lines. Refuses an epic id with `-`, `/`, `\` or spaces, an existing `EPIC.md`, or a dirty tree. |
+| `epic_status` | none | The epic package: state, story rows, next story. With no epic yet, says to call `epic_init`. |
+| `epic_start` | `story` | Cuts the story branch from the epic tip; returns the handoff, the `hooks.start` lines, and the close steps (`hooks.close`, then the `epic_close` call). |
+| `epic_close` | `story` | Commits the epic folder, pushes, opens the story PR (and a draft epic PR when the handoff says `next=none`). |
 | `epic_next` | `story` (the closed story) | Confirms the merge and names the next story. The plugin then spawns it. |
-| `epic_check` | `epic` (optional) | Lint results for one package, or for every package. |
 
 ### The Epic panel
 
 The panel shows the epic, its branch, how many commits it is behind the base
 branch, the story table, the next story, and the open PR with its link. It
-has two buttons: **Check** and **Start next story**. It reads the package
-when it opens, after a button press, and after an `/epic` command result. It
-does not refresh on a timer.
+has one button: **Start next story**. It reads the package when it opens,
+after a button press, and after a slash command result. It does not refresh
+on a timer.
 
 Each story row opens and closes when you press it. A chevron shows whether
 it is open. A colored dot shows the status: the accent color for
@@ -258,10 +263,12 @@ this file. It only reads the values and quotes the hook text to agents.**
 | `epicsDir` | `docs/stories/epics` | Folder with one folder per epic package. Epic detection looks here. |
 | `templates` | none (shipped templates) | Folder with your own `epic.md` and `handoff.md` for `init`. |
 | `branchPrefix` | `feat/` | Story branches are `<branchPrefix><story>-<slug>`. |
+| `epicBranchPrefix` | `epic/` | The epic branch is `<epicBranchPrefix><epic folder>`. |
 | `baseBranch` | `main` | `init` cuts the epic branch from `origin/<baseBranch>`; the draft epic PR targets it. |
 | `profile` | none | Paseo launch profile for successor agents, by id or name. |
+| `hooks.init` | `[]` | Lines quoted after `epic_init`. |
 | `hooks.start` | `[]` | Lines added to the text after `epic_start`. |
-| `hooks.close` | `[]` | Lines quoted by `epic_close_check`, ready or not. |
+| `hooks.close` | `[]` | The close steps, quoted by `epic_start` under "When the story is done:". |
 | `hooks.nextPrompt` | none | Text appended to the successor agent's first prompt. |
 
 Full example and error behavior: [docs/epic-yml.md](docs/epic-yml.md).
@@ -269,31 +276,28 @@ Full example and error behavior: [docs/epic-yml.md](docs/epic-yml.md).
 ## Files the plugin owns in your repo
 
 Each epic package is one folder, `<epicsDir>/<epic>-<slug>/`, with two files.
+The plugin reads the parts below and checks none of them. Comment blocks
+(`<!-- -->`) are skipped.
 
 **`EPIC.md`** holds the plan and the history:
 
 - A **Status** block between `<!-- epic-status:begin -->` and
-  `<!-- epic-status:end -->`: state, branch, stories done, next story. The
-  plugin renders it from the story table.
-- A **Story list** table. Row order is the build order. Status is one of
-  `planned`, `in_progress`, `implemented`, `dropped`.
-- A **Ledger**: one `### <story> — YYYY-MM-DD` entry per closed story, newest
-  last, with five bullets (Branch / PR, Shipped, Decisions, Deviations,
-  Effects on later stories).
+  `<!-- epic-status:end -->`. The panel and `epic_status` show its lines as
+  written; the plugin never rewrites it.
+- A **Story list** table. Row order is the build order. The story id is the
+  first word of the first cell. The panel marks `in_progress` and
+  `implemented` rows.
+- A **Ledger**: one `### <story> …` entry per closed story. The story's entry
+  is the body of its PR.
 
-**`HANDOFF.md`** is the brief for the next story, rewritten whole at every
-close. Its header is
+**`HANDOFF.md`** is the brief for the next story. Its header is
 `<!-- handoff: epic=<E> after=<story> next=<id|none> written=YYYY-MM-DD -->`.
-It has five numbered headings:
+`next=` is the story `epic_start` begins; `after=` is the story `epic_next`
+confirms as merged; `next=none` closes the epic. The shipped template has
+five numbered headings for the brief; the plugin does not check them.
 
-1. Epic state
-2. Last story: what shipped
-3. Plan changes
-4. Next story brief
-5. Gotchas
-
-`/epic check` lints both files: ids, status keys, row statuses, ledger
-entries, the handoff header, and the five headings.
+The shipped templates are neutral. Ship your own with `templates:` in
+`.epic.yml`.
 
 ## Limitations and roadmap
 
@@ -346,6 +350,8 @@ npx vitest run test/daemon-load.test.ts
   checklist.
 - [Design spec](docs/superpowers/specs/2026-10-01-paseo-epic-plugin-design.md)
   and [implementation plan](docs/superpowers/plans/2026-10-01-paseo-epic-plugin.md).
+- [Flow-only spec](docs/superpowers/specs/2026-10-20-flow-only-design.md):
+  why the plugin checks no ids and no content, and what it still reads.
 
 ## License
 
