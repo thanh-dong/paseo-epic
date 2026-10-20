@@ -42,7 +42,7 @@ this version is installed.
 | `profile` | string | none | The Paseo launch profile for successor agents, matched by profile id or name. Without it, the first profile whose notes mention "story" or "epic"; without that, a `claude` agent on the provider's default model (`providers.listModels`); a profile with no model gets its provider's default too. |
 | `hooks.init` | list of strings | `[]` | Lines quoted after `epic_init`, one per line, between "fill EPIC.md and HANDOFF.md" and "commit and push the epic branch". |
 | `hooks.start` | list of strings | `[]` | Lines added to the "what to do now" text after `epic_start`. |
-| `hooks.close` | list of strings | `[]` | The close steps. `epic_start` quotes them under "When the story is done:", one per line, before "Call epic_close with `<story>`". The `/epic close` prompt has the same shape. |
+| `hooks.close` | list of strings | `[]` | The close steps. `epic_start` quotes them under "When the story is done:", one per line, before "Call epic_close with `<story>`". The client's `/epic close` prompt cannot read `.epic.yml`, so it sends only that last line. |
 | `hooks.nextPrompt` | string | none | Text appended to the successor agent's first prompt, after the PR comments. |
 
 ## Full example
