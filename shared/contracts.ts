@@ -26,13 +26,7 @@ const statusResultSchema = z.object({
   behind: z.string().nullable(),
   rows: z.array(rowSchema),
   openPr: z.object({ number: z.number(), url: z.string(), headRefName: z.string() }).nullable(),
-  problems: z.array(z.string()),
-});
-
-const checkResultSchema = z.object({
-  dir: z.string(),
-  problems: z.array(z.string()),
-  summary: z.string(),
+  closeHooks: z.array(z.string()),
 });
 
 const startResultSchema = z.object({
@@ -118,12 +112,6 @@ export const statusRpc = defineRpc({
   name: "epic.status",
   input: z.object({ workspaceDir, ref: z.string().optional() }),
   output: statusResultSchema,
-});
-
-export const checkRpc = defineRpc({
-  name: "epic.check",
-  input: z.object({ workspaceDir, ref: z.string().optional() }),
-  output: z.array(checkResultSchema),
 });
 
 export const initRpc = defineRpc({

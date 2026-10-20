@@ -10,19 +10,9 @@ export class EpicError extends Error {
 
 export const STATUS_BEGIN = "<!-- epic-status:begin -->";
 export const STATUS_END = "<!-- epic-status:end -->";
-export const STATES: readonly string[] = ["planned", "in_progress", "closed"];
-export const ROW_STATUSES: readonly string[] = ["planned", "in_progress", "implemented", "dropped"];
-export const OPEN_ROW: readonly string[] = ["planned", "in_progress"];
-export const HANDOFF_HEADINGS: readonly string[] = ["## 1.", "## 2.", "## 3.", "## 4.", "## 5."];
-
-export const EPIC_ID_RE = /^E\d+$/;
-/** `TH-652`, or scoped to an epic: `TH-E09-3` (the counter restarts per epic, so parallel epics cannot collide). */
-export const STORY_ID_RE = /^[A-Z]{2,}-(?:E\d+-)?\d+$/;
-/** The story id pattern without its anchors, to build larger patterns from. */
-export const STORY_ID_BODY = STORY_ID_RE.source.slice(1, -1);
-export const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export interface Row {
+  /** The first word of the row's first cell, any shape. */
   id: string;
   title: string;
   lane: string;
@@ -38,13 +28,12 @@ export interface EpicPackage {
   /** The package folder (dirname of `path`). */
   dir: string;
   text: string;
+  /** The package folder name before its first `-`. */
   id: string;
   title: string;
+  /** The Status block lines as `key: value`, for display only. */
   status: Record<string, string>;
-  /** Line indexes of the two status markers. */
-  statusSpan: [number, number] | null;
   rows: Row[];
-  ledger: Array<{ id: string; date: string }>;
 }
 
 export interface Handoff {

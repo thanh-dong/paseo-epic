@@ -272,10 +272,10 @@ test("a gh failure that is not a refusal propagates", async () => {
   await expect(resolveStoryChanges(deps, { root, story: "TH-902" })).rejects.toThrow("boom");
 });
 
-test("an id that is not a story id refuses with the next step", async () => {
+test("an epic id is no row of the package: refuses as an unknown story", async () => {
   const { deps } = fakeDeps({});
   await expect(resolveStoryChanges(deps, { root, story: "E99" })).rejects.toThrow(
-    "`E99` is not a story id like TH-652; check the story id",
+    "no epic package lists E99 in this checkout",
   );
 });
 
@@ -284,4 +284,22 @@ test("unknown story refuses with the next step", async () => {
   await expect(resolveStoryChanges(deps, { root, story: "TH-999" })).rejects.toThrow(
     "no epic package lists TH-999 in this checkout; check out the epic branch or a story branch, or open the panel in the story's worktree",
   );
+});
+
+test("a workspace and PR of story S-1 are not story S's", async () => {
+  const dashTmp = mkdtempSync(join(tmpdir(), "paseo-epic-rpc-dash-"));
+  try {
+    const dashRoot = makeRoot(dashTmp);
+    const rows = ["| S Base | One. | normal | in_progress | |", "| S-1 Next | Two. | normal | planned | |"].join("\n");
+    await fill(dashRoot, { rows, ledger: "", after: "none", next: "S" });
+    const ws: Workspace = { id: "ws_9", directory: "/wt/S-1", name: "S-1 Next", branch: "feat/S-1-next", ...PROJECT };
+    const pr: OpenPr = { number: 9, title: "S-1", headRefName: "feat/S-1-next", url: "https://x/pull/9" };
+    const { deps } = fakeDeps({ workspaces: [ws], gh: true, openPrs: [pr] });
+    const out = await resolveStoryChanges(deps, { root: dashRoot, story: "S" });
+    expect(out.workspace).toBeNull();
+    expect(out.pr).toBeNull();
+    expect((await resolveStoryChanges(deps, { root: dashRoot, story: "S-1" })).workspace?.id).toBe("ws_9");
+  } finally {
+    rmSync(dashTmp, { recursive: true, force: true });
+  }
 });

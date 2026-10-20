@@ -20,14 +20,16 @@ type AgentProfile = {
 };
 
 /**
- * The story `next` runs for when none is given: the last ledger entry of the
- * package `status` shows for `ref` (the default package without one).
+ * The story `next` runs for when none is given: the local handoff's `after=`
+ * in the package `status` shows for `ref` (the default package without one).
  */
 export async function lastClosedStory(root: string, config: EpicConfig, ref?: string): Promise<string> {
-  const { epic } = loadLocal(ref ? findEpicDir(root, config, ref) : await statusDir(root, config));
-  const last = epic.ledger.at(-1);
-  if (!last) throw new EpicError(`${epic.id} has no closed story yet; close one before running next`);
-  return last.id;
+  const { epic, handoff } = loadLocal(ref ? findEpicDir(root, config, ref) : await statusDir(root, config));
+  if (!handoff?.found) {
+    throw new EpicError(`${epic.id} has no HANDOFF.md handoff header, so no closed story to run next for`);
+  }
+  if (handoff.after === "none") throw new EpicError(`${epic.id} has no closed story yet; close one before running next`);
+  return handoff.after;
 }
 
 /**
@@ -107,7 +109,7 @@ export function createSpawnNext(deps: {
           `A workspace for ${title} already exists on branch ${next.branch}` +
           `${hit.directory ? ` at ${hit.directory}` : ""}; no new agent was started. ` +
           "Do not start an agent yourself. Tell the user the story continues in that workspace, " +
-          `and that they can start an agent there with \`/epic start ${next.story}\` if none is running. ` +
+          `and that they can start an agent there that calls epic_start with ${next.story} if none is running. ` +
           "This session is finished.",
       };
     }

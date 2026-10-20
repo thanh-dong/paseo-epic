@@ -1,9 +1,6 @@
 import type { NextResult } from "./commands";
-import { STORY_ID_BODY } from "./types";
 
-const PENDING_LINE_RE = new RegExp(
-  `^Spawn pending for (${STORY_ID_BODY}) after (${STORY_ID_BODY}): the plugin starts the successor now\\.$`,
-);
+const PENDING_LINE_RE = /^Spawn pending for (\S+) after (\S+): the plugin starts the successor now\.$/;
 
 /**
  * The line `epic_next` prints first when a next story exists. The turn-ended
@@ -28,41 +25,41 @@ const NO_GH =
   "The PR and its comments were not read because `gh` was not available; " +
   "check the PR by hand for answers to open questions.";
 
-/** After `epic_init`: plan the epic, check it, push it; the first story is not built here. */
-export function afterInit(branch: string): string {
-  return paragraph([
-    `Created the epic package on branch ${branch}.`,
-    "Fill the story table and the Status block in EPIC.md, and HANDOFF.md for the first story.",
-    "Run epic_check until it reports ok, then commit and push the epic branch.",
-    "The first story starts in a fresh agent with epic_start; do not build it in this session.",
-  ]);
+/**
+ * After `epic_init`: fill the package, follow the `.epic.yml` init lines (one
+ * per line), push the epic branch; the first story is not built here.
+ */
+export function afterInit(branch: string, hooks: string[]): string {
+  return [
+    `Created the epic package on branch ${branch}. Fill EPIC.md and HANDOFF.md for the first story.`,
+    ...hooks,
+    "Then commit and push the epic branch. " +
+      "The first story starts in a fresh agent with epic_start; do not build it in this session.",
+  ].join("\n");
 }
 
 /** `epic_status` in a repo that has no epic package yet. */
 export function noEpicYet(epicsDir: string): string {
   return paragraph([
     `This repo has no epic yet: no EPIC.md under ${epicsDir}.`,
-    "Call epic_init with an epic id like E1 and a title to create one.",
+    "Call epic_init with an epic id and a title to create one.",
   ]);
 }
 
-/** After `epic_start`: the handoff is the context; `.epic.yml` start hooks follow. */
-export function afterStart(hooks: string[]): string {
-  return paragraph([
-    'This handoff is your context. Read the files under "Read first" and the story packet.',
-    "Do not re-read the whole EPIC.md unless the handoff sends you there.",
-    ...hooks,
-  ]);
-}
-
-/** After `epic_close_check`: fix and check again, or close. */
-export function afterCloseCheck(problems: string[]): string {
-  if (problems.length === 0) return "The package is ready to close. Call epic_close now.";
-  return (
-    "Fix these, then call epic_close_check again. The ledger entry has five bullets: " +
-    "Branch / PR, Shipped, Decisions, Deviations, Effects on later stories. " +
-    "HANDOFF.md is rewritten whole with headings 1 to 5."
-  );
+/**
+ * After `epic_start`: the handoff is the context and the `.epic.yml` start
+ * hooks follow; then the close steps, so the agent has them before it builds.
+ */
+export function afterStart(story: string, startHooks: string[], closeHooks: string[]): string {
+  return [
+    paragraph([
+      "This handoff is your context. Read the files it lists.",
+      "Do not re-read the whole EPIC.md unless the handoff sends you there.",
+      ...startHooks,
+    ]),
+    "When the story is done:",
+    closeInstructions(story, closeHooks),
+  ].join("\n");
 }
 
 /** After `epic_close`: the PR link (or the commands to run by hand) and the wait for the merge. */
@@ -113,7 +110,7 @@ export function afterNext(result: NextResult, spawned: { title: string } | null 
   }
   return paragraph([
     `${next.story} ${next.title} is next; the successor is not started yet.`,
-    `Create a worktree on a new branch ${next.branch} from ${next.baseRef}, then start an agent there with \`/epic start ${next.story}\`.`,
+    `Create a worktree on a new branch ${next.branch} from ${next.baseRef}, then start an agent there and tell it to call epic_start with ${next.story}.`,
     noGh,
   ]);
 }
@@ -125,7 +122,7 @@ const TRUSTED: readonly string[] = ["OWNER", "MEMBER", "COLLABORATOR"];
 export function nextPrompt(result: NextResult, extra?: string): string {
   if (result.next === null) throw new Error(`${result.epic} has no next story to prompt`);
   const { pr, comments } = result.closed;
-  const lines = [`/epic start ${result.next.story}`, ""];
+  const lines = [startInstructions(result.next.story), ""];
   if (pr === null) {
     lines.push("Answers from the story PR: not read, because `gh` was not available.");
   } else {
@@ -140,17 +137,9 @@ export function nextPrompt(result: NextResult, extra?: string): string {
   return lines.join("\n");
 }
 
-/** What `/epic close <story>` sends the story's agent. */
+/** The close steps: the `.epic.yml` close lines, one per line, then the call. Also what `/epic close <story>` sends. */
 export function closeInstructions(story: string, hooks: string[]): string {
-  return paragraph([
-    `Close story ${story}. Update the epic package by hand:`,
-    `set the ${story} row to \`implemented\` with Done \`YYYY-MM-DD PR #n\` (\`PR pending\` while the number is not known);`,
-    `append the ledger entry \`### ${story} — YYYY-MM-DD\` with five bullets:`,
-    "Branch / PR, Shipped, Decisions, Deviations, Effects on later stories;",
-    `rewrite HANDOFF.md whole with headings 1 to 5 and the header \`after=${story}\`.`,
-    ...hooks,
-    `Then call epic_close_check with ${story} until it reports ready, and call epic_close with ${story}.`,
-  ]);
+  return [...hooks, `Call epic_close with ${story}.`].join("\n");
 }
 
 /** What `/epic start <story>` sends the workspace's agent. */

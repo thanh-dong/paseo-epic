@@ -19,9 +19,18 @@ test("defaults when .epic.yml is absent", () => {
   expect(loadConfig(root)).toEqual({
     epicsDir: "docs/stories/epics",
     branchPrefix: "feat/",
+    epicBranchPrefix: "epic/",
     baseBranch: "main",
-    hooks: { start: [], close: [] },
+    hooks: { init: [], start: [], close: [] },
   });
+});
+
+test("reads hooks.init and epicBranchPrefix", () => {
+  writeFileSync(join(root, ".epic.yml"), "epicBranchPrefix: epics/\nhooks:\n  init:\n    - Mint the ids.\n");
+  const cfg = loadConfig(root);
+  expect(cfg.epicBranchPrefix).toBe("epics/");
+  expect(cfg.hooks.init).toEqual(["Mint the ids."]);
+  expect(cfg.hooks.start).toEqual([]);
 });
 
 test("reads hooks and profile", () => {

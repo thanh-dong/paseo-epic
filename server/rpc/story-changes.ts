@@ -1,10 +1,10 @@
 import { type StoryChanges, storyChanges } from "../core/changes";
-import { epicBranch, rowOf } from "../core/check";
 import { pickMergedPr } from "../core/commands";
 import { loadConfig } from "../core/config";
 import { ghAvailable, ghMergedPrs, ghOpenPrs } from "../core/git";
-import { findEpicDir, loadLocal } from "../core/locate";
-import { EpicError, STORY_ID_RE } from "../core/types";
+import { epicBranch, findEpicDir, loadLocal } from "../core/locate";
+import { rowOf, storyOfName } from "../core/parse";
+import { EpicError } from "../core/types";
 import type { PaseoApi } from "../sdk-types";
 
 interface WorkspaceEntry {
@@ -59,7 +59,10 @@ function newest(agents: AgentEntry[]): AgentEntry | null {
   return open.reduce((a, b) => (b.createdAt > a.createdAt ? b : a));
 }
 
-/** The story's PR into `base`: open first, merged only for an implemented row; null without gh. */
+/**
+ * The story's PR into `base`: open first, merged only for an implemented row;
+ * null without gh. `ids` are the package's story ids, so S-1's PR is not S's.
+ */
 async function findPr(
   deps: StoryChangesDeps,
   root: string,
@@ -67,13 +70,14 @@ async function findPr(
   story: string,
   prefix: string,
   status: string,
+  ids: readonly string[],
 ): Promise<StoryChangesResult["pr"]> {
   try {
     if (!(await deps.gh.available())) return null;
-    const open = (await deps.gh.openPrs(root, base)).find((pr) => pr.headRefName.startsWith(`${prefix}${story}-`));
+    const open = pickMergedPr(await deps.gh.openPrs(root, base), story, prefix, ids);
     if (open) return { number: open.number, url: open.url, state: "open" };
     if (status !== "implemented") return null;
-    const merged = pickMergedPr(await deps.gh.mergedPrs(root, base), story, prefix);
+    const merged = pickMergedPr(await deps.gh.mergedPrs(root, base), story, prefix, ids);
     return merged ? { number: merged.number, url: merged.url, state: "merged" } : null;
   } catch (err) {
     // gh not logged in, or the remote is not on GitHub: no PR to show.
@@ -83,8 +87,9 @@ async function findPr(
 }
 
 /**
- * A story's row, workspace, agent, PR and changed files. Only an unknown story
- * and a missing remote epic branch refuse; anything else not found is null.
+ * A story's row, workspace, agent, PR and changed files. Only a story that is
+ * no row of a package and a missing remote epic branch refuse; anything else
+ * not found is null.
  */
 export async function resolveStoryChanges(
   deps: StoryChangesDeps,
@@ -92,14 +97,13 @@ export async function resolveStoryChanges(
 ): Promise<StoryChangesResult> {
   const { root, story } = input;
   const config = loadConfig(root);
-  if (!STORY_ID_RE.test(story)) throw new EpicError(`\`${story}\` is not a story id like TH-652; check the story id`);
   const unknown =
     `no epic package lists ${story} in this checkout; check out the epic branch or a story branch, or open the panel in the story's worktree`;
   let dir: string;
   try {
     dir = findEpicDir(root, config, story);
   } catch (err) {
-    if (err instanceof EpicError && err.message.startsWith("no EPIC.md story list contains")) {
+    if (err instanceof EpicError && err.message.startsWith(`\`${story}\` is not an epic id`)) {
       throw new EpicError(unknown);
     }
     throw err;
@@ -107,7 +111,7 @@ export async function resolveStoryChanges(
   const { epic } = loadLocal(dir);
   const row = rowOf(epic, story);
   if (row === undefined) throw new EpicError(unknown);
-  const base = epicBranch(epic);
+  const base = epicBranch(config, dir);
 
   // Search the caller's project only; a caller in no workspace searches them all.
   const all = (await deps.listWorkspaces()).filter((w) => w.directory !== "");
@@ -117,8 +121,8 @@ export async function resolveStoryChanges(
   const scoped = caller ? all.filter((w) => w.projectId === caller.projectId) : all;
   const ids = new Set(scoped.map((w) => w.id));
 
-  const prefix = `${config.branchPrefix}${story}-`;
-  const onBranch = scoped.filter((w) => w.branch?.startsWith(prefix));
+  const storyIds = epic.rows.map((r) => r.id);
+  const onBranch = scoped.filter((w) => w.branch !== null && storyOfName(storyIds, config.branchPrefix, w.branch) === story);
   // The caller's own workspace wins when it is on the story branch.
   const ws = onBranch.find((w) => w.directory === root) ?? onBranch[0] ?? null;
   let note: string | null = null;
@@ -139,7 +143,7 @@ export async function resolveStoryChanges(
     done: row.done,
     workspace: ws && { id: ws.id, directory: ws.directory, name: ws.name },
     agent: agent && { id: agent.id, title: agent.title, status: agent.status },
-    pr: await findPr(deps, root, base, story, config.branchPrefix, row.status),
+    pr: await findPr(deps, root, base, story, config.branchPrefix, row.status, storyIds),
     changes: ws && (await deps.changes(ws.directory, base)),
     note,
   };

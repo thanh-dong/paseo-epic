@@ -1,17 +1,9 @@
-import { dirname } from "node:path";
-import {
-  type EpicPackage,
-  type Handoff,
-  type Row,
-  STATUS_BEGIN,
-  STATUS_END,
-  STORY_ID_BODY,
-  STORY_ID_RE,
-} from "./types";
+import { basename, dirname } from "node:path";
+import { type EpicPackage, type Handoff, type Row, STATUS_BEGIN, STATUS_END } from "./types";
 
-const H1_RE = /^#\s+(E\d+)\s*[—–-]\s*(.+?)\s*$/m;
-const LEDGER_RE = new RegExp(`^###\\s+(${STORY_ID_BODY})\\s*[—–-]\\s*(\\S+)`);
 const HANDOFF_RE = /<!--\s*handoff:\s*epic=(\S+)\s+after=(\S+)\s+next=(\S+)\s+written=(\S+)\s*-->/;
+/** A table separator row: `| --- | :---: |`. */
+const SEPARATOR_RE = /^\|[\s|:-]*-[\s|:-]*$/;
 
 /** Python's str.splitlines(): no trailing empty element, "" gives []. */
 export function splitLines(text: string): string[] {
@@ -20,28 +12,51 @@ export function splitLines(text: string): string[] {
   return lines;
 }
 
-export function parseEpic(path: string, text: string): EpicPackage {
-  const epic: EpicPackage = {
-    path,
-    dir: dirname(path),
-    text,
-    id: "",
-    title: "",
-    status: {},
-    statusSpan: null,
-    rows: [],
-    ledger: [],
-  };
-  const h1 = H1_RE.exec(text);
-  if (h1) {
-    epic.id = h1[1];
-    epic.title = h1[2];
+/** The epic id: the package folder name before its first `-`. */
+export function folderEpicId(dir: string): string {
+  return basename(dir).split("-")[0];
+}
+
+/** A `<!-- … -->` span, across lines; an unclosed `<!--` runs to the end, as markdown renders it. */
+const COMMENT_RE = /<!--[\s\S]*?(?:-->|$)/g;
+/** The characters `splitLines` breaks on. */
+const NOT_A_BREAK_RE = /[^\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029]/g;
+
+/**
+ * `text` with every `<!-- … -->` span removed. Several spans per line are
+ * fine. The line breaks inside a span stay, so line indexes do not move.
+ */
+export function stripComments(text: string): string {
+  return text.replace(COMMENT_RE, (span) => span.replace(NOT_A_BREAK_RE, ""));
+}
+
+/**
+ * The id among `ids` that `name` starts with as `<prefix><id>-`, the longest
+ * one when several fit, so a branch `feat/S-1-x` is S-1's, never S's.
+ */
+export function storyOfName(ids: readonly string[], prefix: string, name: string): string | undefined {
+  let best: string | undefined;
+  for (const id of ids) {
+    if (name.startsWith(`${prefix}${id}-`) && (best === undefined || id.length > best.length)) best = id;
   }
+  return best;
+}
+
+export function parseEpic(path: string, text: string): EpicPackage {
+  const dir = dirname(path);
+  const epic: EpicPackage = { path, dir, text, id: folderEpicId(dir), title: "", status: {}, rows: [] };
   const lines = splitLines(text);
+  const h1 = lines.find((line) => /^#\s/.test(line));
+  if (h1) {
+    // The title is the H1 after the id and a dash, when the H1 starts with them.
+    const heading = h1.replace(/^#\s+/, "").trim();
+    const afterId = heading.startsWith(epic.id) ? heading.slice(epic.id.length) : "";
+    const m = /^\s*[—–-]\s*(.+)$/.exec(afterId);
+    epic.title = m ? m[1].trim() : heading;
+  }
   const b = lines.indexOf(STATUS_BEGIN);
   const e = b >= 0 ? lines.indexOf(STATUS_END, b) : -1;
   if (b >= 0 && e >= 0) {
-    epic.statusSpan = [b, e];
     for (const line of lines.slice(b + 1, e)) {
       const colon = line.indexOf(":");
       if (colon >= 0) {
@@ -49,11 +64,7 @@ export function parseEpic(path: string, text: string): EpicPackage {
       }
     }
   }
-  epic.rows = parseRows(lines);
-  for (const line of section(lines, "## Ledger")) {
-    const m = LEDGER_RE.exec(line);
-    if (m) epic.ledger.push({ id: m[1], date: m[2] });
-  }
+  epic.rows = parseRows(splitLines(stripComments(text)));
   return epic;
 }
 
@@ -71,30 +82,26 @@ export function section(lines: string[], heading: string): string[] {
   return out;
 }
 
-function parseRows(lines: string[]): Row[] {
+/** The rows of the `## Story list` table in comment-free `lines`: the id is the first word of the first cell. */
+function parseRows(clean: string[]): Row[] {
   const rows: Row[] = [];
   let inside = false;
-  let inComment = false;
-  lines.forEach((line, i) => {
+  clean.forEach((line, i) => {
     if (line.startsWith("## ")) {
       inside = line.trim() === "## Story list";
       return;
     }
-    if (!inside) return;
-    if (line.includes("<!--")) inComment = true;
-    if (inComment) {
-      if (line.includes("-->")) inComment = false;
-      return;
-    }
-    if (!line.startsWith("|")) return;
+    if (!inside || !line.startsWith("|")) return;
+    // The separator, and the header row right above it, are not stories.
+    if (SEPARATOR_RE.test(line.trim()) || SEPARATOR_RE.test((clean[i + 1] ?? "").trim())) return;
     const cells = line
       .trim()
       .replace(/^\|+|\|+$/g, "")
       .split("|")
       .map((c) => c.trim());
-    if (cells.length < 4 || /^[- ]*$/.test(cells[0]) || cells[0] === "Story") return;
+    if (cells.length < 4) return;
     const first = /^(\S+)(?:\s+([\s\S]*))?$/.exec(cells[0]);
-    if (!first || !STORY_ID_RE.test(first[1])) return;
+    if (!first) return;
     rows.push({
       id: first[1],
       title: first[2] ?? "",
@@ -107,6 +114,10 @@ function parseRows(lines: string[]): Row[] {
   return rows;
 }
 
+export function rowOf(epic: EpicPackage, id: string): Row | undefined {
+  return epic.rows.find((r) => r.id === id);
+}
+
 export function parseHandoff(text: string): Handoff {
   const h: Handoff = { text, found: false, epic: "", after: "", next: "", written: "" };
   const m = HANDOFF_RE.exec(text);
@@ -117,13 +128,14 @@ export function parseHandoff(text: string): Handoff {
   return h;
 }
 
-/** The `### <story> …` entry under `## Ledger`, heading included, trimmed. */
+/** The `### <story> …` entry under `## Ledger`, heading included, trimmed; comment blocks skipped. */
 export function ledgerEntry(text: string, story: string): string {
   const out: string[] = [];
   let inside = false;
-  for (const line of section(splitLines(text), "## Ledger")) {
+  for (const raw of section(splitLines(stripComments(text)), "## Ledger")) {
+    const line = raw.trimEnd();
     if (line.startsWith("### ")) {
-      inside = line.startsWith(`### ${story} `);
+      inside = line === `### ${story}` || line.startsWith(`### ${story} `);
       if (inside) out.push(line);
       continue;
     }

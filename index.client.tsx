@@ -3,9 +3,9 @@ import type {
   PluginClientContext,
   PluginWorkspaceCommandContext,
 } from "@getpaseo/plugin/client";
-import { checkRpc, initRpc, nextRpc, statusRpc } from "./shared/contracts";
+import { initRpc, nextRpc, statusRpc } from "./shared/contracts";
 import { EpicPanel } from "./client/EpicPanel";
-import { errorText, folderName, type PanelResult, postResult } from "./client/results";
+import { errorText, type PanelResult, postResult } from "./client/results";
 import { closeInstructions, noAgent, startInstructions, USAGE } from "./client/strings";
 
 // Derived from the host SDK: `@getpaseo/client` is not installed on a production-only install.
@@ -70,10 +70,12 @@ async function onEpicCommand(ctx: PluginWorkspaceCommandContext & { args: string
     case "start":
       if (!id) throw new Error(USAGE);
       return sendToAgent(ctx, verb, startInstructions(id));
-    case "close":
-      // `.epic.yml` close hooks live on the server; the client has none to add.
+    case "close": {
       if (!id) throw new Error(USAGE);
-      return sendToAgent(ctx, verb, closeInstructions(id, []));
+      // The client cannot read `.epic.yml`; the status RPC carries its close hooks.
+      const { closeHooks } = await ctx.rpc(statusRpc, { workspaceDir, ref: id });
+      return sendToAgent(ctx, verb, closeInstructions(id, closeHooks));
+    }
     case "init": {
       // `init E1 "Title"`: the title is the rest of the line, quotes optional.
       const title = /^init\s+\S+\s+(.+)$/s.exec(args)?.[1]?.trim().replace(/^(["'])(.*)\1$/s, "$2");
@@ -85,13 +87,6 @@ async function onEpicCommand(ctx: PluginWorkspaceCommandContext & { args: string
     }
     case "next":
       return runInPanel(ctx, async () => ({ message: (await ctx.rpc(nextRpc, { workspaceDir, story: id })).message }));
-    case "check":
-      return runInPanel(ctx, async () => {
-        const results = await ctx.rpc(checkRpc, { workspaceDir, ref: id });
-        // Without an id every package is checked; name the folder on each problem.
-        const problems = results.flatMap((r) => (id ? r.problems : r.problems.map((p) => `${folderName(r.dir)}: ${p}`)));
-        return { ref: id ?? null, problems };
-      });
     case "status":
       return runInPanel(ctx, async () => {
         return { ref: id ?? null, status: await ctx.rpc(statusRpc, { workspaceDir, ref: id }) };
@@ -112,7 +107,7 @@ export default function contribute(client: PluginClientContext) {
     }),
     client.addSlashCommand({
       name: "epic",
-      description: "Epic routine: init, start, close, next, check, status",
+      description: "Epic routine: init, start, close, next, status",
       argumentHint: ARGUMENT_HINT,
       context: "workspace",
       onSubmit: onEpicCommand,

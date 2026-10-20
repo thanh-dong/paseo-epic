@@ -1,7 +1,7 @@
 import { type PluginWorkspacePanelProps, useRpc, useWorkspace } from "@getpaseo/plugin/client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
-import { checkRpc, isEpicRpc, nextRpc, statusRpc, storyChangesRpc } from "../shared/contracts";
+import { isEpicRpc, nextRpc, statusRpc, storyChangesRpc } from "../shared/contracts";
 import { PanelHeader } from "./PanelHeader";
 import { errorText, onResult, type PanelResult, takeResult } from "./results";
 import { type RowState, type StoryId, StoryList } from "./StoryRow";
@@ -23,7 +23,6 @@ export function EpicPanel({ theme, layout, workspaceId, navigation }: PluginWork
 
   const isEpic = useRpc(isEpicRpc);
   const readStatus = useRpc(statusRpc);
-  const check = useRpc(checkRpc);
   const next = useRpc(nextRpc);
   const storyChanges = useRpc(storyChangesRpc);
   const epicRef = useRef<EpicRef>(null);
@@ -144,11 +143,6 @@ export function EpicPanel({ theme, layout, workspaceId, navigation }: PluginWork
     [load],
   );
 
-  const onCheck = () =>
-    press(async () => {
-      const results = await check({ workspaceDir: dir ?? "", ref: epicRef.current ?? state.status?.epic });
-      return { problems: results.flatMap((r) => r.problems) };
-    });
   const onNext = () =>
     press(async () => ({ message: (await next({ workspaceDir: dir ?? "", ref: epicRef.current ?? undefined })).message }));
 
@@ -160,7 +154,6 @@ export function EpicPanel({ theme, layout, workspaceId, navigation }: PluginWork
     );
   }
 
-  const problems = state.problems ?? status?.problems;
   const openPr = status?.openPr;
   const openBrowser = navigation?.openBrowser;
   const openPrLink = openPr && openBrowser ? () => openBrowser({ url: openPr.url, workspaceId }) : undefined;
@@ -198,7 +191,6 @@ export function EpicPanel({ theme, layout, workspaceId, navigation }: PluginWork
               </Text>
             </View>
           ) : null}
-          <ActionButton label={labels.check} busy={busy} onPress={onCheck} styles={styles} />
           <ActionButton label={labels.startNext} busy={busy} onPress={onNext} styles={styles} />
         </View>
       )}
@@ -213,15 +205,6 @@ export function EpicPanel({ theme, layout, workspaceId, navigation }: PluginWork
           <Text selectable style={styles.text}>
             {state.message}
           </Text>
-        ) : null}
-        {problems && problems.length === 0 ? <Text style={styles.muted}>{labels.lastCheckOk}</Text> : null}
-        {problems && problems.length > 0 ? (
-          <>
-            <Text style={styles.text}>{`${labels.lastCheckProblems} (${problems.length})`}</Text>
-            {problems.map((p, i) => (
-              <Text selectable key={`${i}-${p}`} style={styles.muted}>{`- ${p}`}</Text>
-            ))}
-          </>
         ) : null}
       </View>
     </ScrollView>

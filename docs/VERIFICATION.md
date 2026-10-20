@@ -40,7 +40,7 @@ through the table.
 | 7 | Epic panel, a second theme | text is readable in both themes | pending | |
 | 8 | `/epic status` | opens the Epic panel | pending | |
 | 9 | `/epic` in the composer | autocomplete offers the command | pending | |
-| 10 | New agent in the E100 workspace | it lists the `epic_*` tools, including `epic_status` and `epic_check` | pass (Haiku 4.5 agent listed epic_check, epic_status, epic_close_check, epic_close, epic_next, epic_start) | 2026-10-01 |
+| 10 | New agent in the E100 workspace | it lists the five `epic_*` tools: `epic_init`, `epic_status`, `epic_start`, `epic_close`, `epic_next` | pending (re-run: the tool list changed on 2026-10-20; the 2026-10-01 run passed with the older list) | |
 | 11 | Ask that agent to call `epic_status` | it returns the E100 record and a "what to do now" line | pass (E100 record, 4 of 6, next TH-668, "The next open story is TH-668…") | 2026-10-01 |
 | 12 | `paseo plugin logs epic` after install | no "Cannot find module 'zod'" (Paseo supplies `zod` to the bundle) | pass (no missing-module error at load; status and check answered) | 2026-10-01 |
 | 13 | Local-path install after `npm ci --omit=dev` in the clone | `paseo plugin ls` shows `epic` as `running` | pass (install from the clone with node_modules present; npm ci --omit=dev not exercised) | 2026-10-01 |
@@ -64,7 +64,7 @@ From spec section 13. Do this only after every row above passes.
 1. Install the plugin on the daemon; enable plugins once, with permission.
 2. Add `.epic.yml` to inflow: the intake gate, the ADR rule, and the plan
    rule as hook text; `profile: story`. The ADR rule belongs to close:
-   put it under `hooks.close`, which `epic_close_check` quotes.
+   put it under `hooks.close`, which `epic_start` quotes as the close steps.
 3. Delete `.claude/skills/epic/`, `scripts/epic.py`, and
    `scripts/tests/test_epic.py` from inflow. Keep `docs/templates/epic.md`
    and `handoff.md` as overrides.

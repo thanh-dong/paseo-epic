@@ -83,10 +83,10 @@ var require_code = __commonJS({
       }
       get names() {
         var _a3;
-        return (_a3 = this._names) !== null && _a3 !== void 0 ? _a3 : this._names = this._items.reduce((names, c) => {
+        return (_a3 = this._names) !== null && _a3 !== void 0 ? _a3 : this._names = this._items.reduce((names2, c) => {
           if (c instanceof Name)
-            names[c.str] = (names[c.str] || 0) + 1;
-          return names;
+            names2[c.str] = (names2[c.str] || 0) + 1;
+          return names2;
         }, {});
       }
     };
@@ -412,11 +412,11 @@ var require_codegen = __commonJS({
         const rhs = this.rhs === void 0 ? "" : ` = ${this.rhs}`;
         return `${varKind} ${this.name}${rhs};` + _n;
       }
-      optimizeNames(names, constants) {
-        if (!names[this.name.str])
+      optimizeNames(names2, constants) {
+        if (!names2[this.name.str])
           return;
         if (this.rhs)
-          this.rhs = optimizeExpr(this.rhs, names, constants);
+          this.rhs = optimizeExpr(this.rhs, names2, constants);
         return this;
       }
       get names() {
@@ -433,15 +433,15 @@ var require_codegen = __commonJS({
       render({ _n }) {
         return `${this.lhs} = ${this.rhs};` + _n;
       }
-      optimizeNames(names, constants) {
-        if (this.lhs instanceof code_1.Name && !names[this.lhs.str] && !this.sideEffects)
+      optimizeNames(names2, constants) {
+        if (this.lhs instanceof code_1.Name && !names2[this.lhs.str] && !this.sideEffects)
           return;
-        this.rhs = optimizeExpr(this.rhs, names, constants);
+        this.rhs = optimizeExpr(this.rhs, names2, constants);
         return this;
       }
       get names() {
-        const names = this.lhs instanceof code_1.Name ? {} : { ...this.lhs.names };
-        return addExprNames(names, this.rhs);
+        const names2 = this.lhs instanceof code_1.Name ? {} : { ...this.lhs.names };
+        return addExprNames(names2, this.rhs);
       }
     };
     var AssignOp = class extends Assign {
@@ -497,8 +497,8 @@ var require_codegen = __commonJS({
       optimizeNodes() {
         return `${this.code}` ? this : void 0;
       }
-      optimizeNames(names, constants) {
-        this.code = optimizeExpr(this.code, names, constants);
+      optimizeNames(names2, constants) {
+        this.code = optimizeExpr(this.code, names2, constants);
         return this;
       }
       get names() {
@@ -527,20 +527,20 @@ var require_codegen = __commonJS({
         }
         return nodes.length > 0 ? this : void 0;
       }
-      optimizeNames(names, constants) {
+      optimizeNames(names2, constants) {
         const { nodes } = this;
         let i = nodes.length;
         while (i--) {
           const n = nodes[i];
-          if (n.optimizeNames(names, constants))
+          if (n.optimizeNames(names2, constants))
             continue;
-          subtractNames(names, n.names);
+          subtractNames(names2, n.names);
           nodes.splice(i, 1);
         }
         return nodes.length > 0 ? this : void 0;
       }
       get names() {
-        return this.nodes.reduce((names, n) => addNames(names, n.names), {});
+        return this.nodes.reduce((names2, n) => addNames(names2, n.names), {});
       }
     };
     var BlockNode = class extends ParentNode {
@@ -585,20 +585,20 @@ var require_codegen = __commonJS({
           return void 0;
         return this;
       }
-      optimizeNames(names, constants) {
+      optimizeNames(names2, constants) {
         var _a3;
-        this.else = (_a3 = this.else) === null || _a3 === void 0 ? void 0 : _a3.optimizeNames(names, constants);
-        if (!(super.optimizeNames(names, constants) || this.else))
+        this.else = (_a3 = this.else) === null || _a3 === void 0 ? void 0 : _a3.optimizeNames(names2, constants);
+        if (!(super.optimizeNames(names2, constants) || this.else))
           return;
-        this.condition = optimizeExpr(this.condition, names, constants);
+        this.condition = optimizeExpr(this.condition, names2, constants);
         return this;
       }
       get names() {
-        const names = super.names;
-        addExprNames(names, this.condition);
+        const names2 = super.names;
+        addExprNames(names2, this.condition);
         if (this.else)
-          addNames(names, this.else.names);
-        return names;
+          addNames(names2, this.else.names);
+        return names2;
       }
     };
     If.kind = "if";
@@ -613,10 +613,10 @@ var require_codegen = __commonJS({
       render(opts) {
         return `for(${this.iteration})` + super.render(opts);
       }
-      optimizeNames(names, constants) {
-        if (!super.optimizeNames(names, constants))
+      optimizeNames(names2, constants) {
+        if (!super.optimizeNames(names2, constants))
           return;
-        this.iteration = optimizeExpr(this.iteration, names, constants);
+        this.iteration = optimizeExpr(this.iteration, names2, constants);
         return this;
       }
       get names() {
@@ -637,8 +637,8 @@ var require_codegen = __commonJS({
         return `for(${varKind} ${name}=${from}; ${name}<${to}; ${name}++)` + super.render(opts);
       }
       get names() {
-        const names = addExprNames(super.names, this.from);
-        return addExprNames(names, this.to);
+        const names2 = addExprNames(super.names, this.from);
+        return addExprNames(names2, this.to);
       }
     };
     var ForIter = class extends For {
@@ -652,10 +652,10 @@ var require_codegen = __commonJS({
       render(opts) {
         return `for(${this.varKind} ${this.name} ${this.loop} ${this.iterable})` + super.render(opts);
       }
-      optimizeNames(names, constants) {
-        if (!super.optimizeNames(names, constants))
+      optimizeNames(names2, constants) {
+        if (!super.optimizeNames(names2, constants))
           return;
-        this.iterable = optimizeExpr(this.iterable, names, constants);
+        this.iterable = optimizeExpr(this.iterable, names2, constants);
         return this;
       }
       get names() {
@@ -697,20 +697,20 @@ var require_codegen = __commonJS({
         (_b = this.finally) === null || _b === void 0 ? void 0 : _b.optimizeNodes();
         return this;
       }
-      optimizeNames(names, constants) {
+      optimizeNames(names2, constants) {
         var _a3, _b;
-        super.optimizeNames(names, constants);
-        (_a3 = this.catch) === null || _a3 === void 0 ? void 0 : _a3.optimizeNames(names, constants);
-        (_b = this.finally) === null || _b === void 0 ? void 0 : _b.optimizeNames(names, constants);
+        super.optimizeNames(names2, constants);
+        (_a3 = this.catch) === null || _a3 === void 0 ? void 0 : _a3.optimizeNames(names2, constants);
+        (_b = this.finally) === null || _b === void 0 ? void 0 : _b.optimizeNames(names2, constants);
         return this;
       }
       get names() {
-        const names = super.names;
+        const names2 = super.names;
         if (this.catch)
-          addNames(names, this.catch.names);
+          addNames(names2, this.catch.names);
         if (this.finally)
-          addNames(names, this.finally.names);
-        return names;
+          addNames(names2, this.finally.names);
+        return names2;
       }
     };
     var Catch = class extends BlockNode {
@@ -994,15 +994,15 @@ var require_codegen = __commonJS({
       }
     };
     exports.CodeGen = CodeGen;
-    function addNames(names, from) {
+    function addNames(names2, from) {
       for (const n in from)
-        names[n] = (names[n] || 0) + (from[n] || 0);
-      return names;
+        names2[n] = (names2[n] || 0) + (from[n] || 0);
+      return names2;
     }
-    function addExprNames(names, from) {
-      return from instanceof code_1._CodeOrName ? addNames(names, from.names) : names;
+    function addExprNames(names2, from) {
+      return from instanceof code_1._CodeOrName ? addNames(names2, from.names) : names2;
     }
-    function optimizeExpr(expr, names, constants) {
+    function optimizeExpr(expr, names2, constants) {
       if (expr instanceof code_1.Name)
         return replaceName(expr);
       if (!canOptimize(expr))
@@ -1018,18 +1018,18 @@ var require_codegen = __commonJS({
       }, []));
       function replaceName(n) {
         const c = constants[n.str];
-        if (c === void 0 || names[n.str] !== 1)
+        if (c === void 0 || names2[n.str] !== 1)
           return n;
-        delete names[n.str];
+        delete names2[n.str];
         return c;
       }
       function canOptimize(e) {
-        return e instanceof code_1._Code && e._items.some((c) => c instanceof code_1.Name && names[c.str] === 1 && constants[c.str] !== void 0);
+        return e instanceof code_1._Code && e._items.some((c) => c instanceof code_1.Name && names2[c.str] === 1 && constants[c.str] !== void 0);
       }
     }
-    function subtractNames(names, from) {
+    function subtractNames(names2, from) {
       for (const n in from)
-        names[n] = (names[n] || 0) - (from[n] || 0);
+        names2[n] = (names2[n] || 0) - (from[n] || 0);
     }
     function not(x) {
       return typeof x == "boolean" || typeof x == "number" || x === null ? !x : (0, code_1._)`!${par(x)}`;
@@ -1227,7 +1227,7 @@ var require_names = __commonJS({
     "use strict";
     Object.defineProperty(exports, "__esModule", { value: true });
     var codegen_1 = require_codegen();
-    var names = {
+    var names2 = {
       // validation function arguments
       data: new codegen_1.Name("data"),
       // data passed to validation function
@@ -1256,7 +1256,7 @@ var require_names = __commonJS({
       jsonLen: new codegen_1.Name("jsonLen"),
       jsonPart: new codegen_1.Name("jsonPart")
     };
-    exports.default = names;
+    exports.default = names2;
   }
 });
 
@@ -34770,12 +34770,12 @@ function rewriteKeyNames(ctx) {
   const rewrites = /* @__PURE__ */ new Map();
   for (const record2 of pendingRecords.get(ctx) ?? []) {
     const seen = ctx.seen.get(record2);
-    const names = (seen?.def ?? seen?.schema)?.propertyNames;
-    if (!names || names === true || rewrites.has(names))
+    const names2 = (seen?.def ?? seen?.schema)?.propertyNames;
+    if (!names2 || names2 === true || rewrites.has(names2))
       continue;
-    const rewritten = stringifyKeyNames(bySchema, names, /* @__PURE__ */ new Set());
-    if (rewritten !== names)
-      rewrites.set(names, rewritten);
+    const rewritten = stringifyKeyNames(bySchema, names2, /* @__PURE__ */ new Set());
+    if (rewritten !== names2)
+      rewrites.set(names2, rewritten);
   }
   if (!rewrites.size)
     return;
@@ -43814,11 +43814,9 @@ var StdioServerTransport = class {
 import { existsSync as existsSync4, mkdirSync, writeFileSync } from "node:fs";
 import { basename as basename3, join as join4 } from "node:path";
 
-// server/core/check.ts
-import { basename } from "node:path";
-
-// server/core/parse.ts
-import { dirname } from "node:path";
+// server/core/git.ts
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 
 // server/core/types.ts
 var EpicError = class extends Error {
@@ -43829,269 +43827,8 @@ var EpicError = class extends Error {
 };
 var STATUS_BEGIN = "<!-- epic-status:begin -->";
 var STATUS_END = "<!-- epic-status:end -->";
-var STATES = ["planned", "in_progress", "closed"];
-var ROW_STATUSES = ["planned", "in_progress", "implemented", "dropped"];
-var OPEN_ROW = ["planned", "in_progress"];
-var HANDOFF_HEADINGS = ["## 1.", "## 2.", "## 3.", "## 4.", "## 5."];
-var EPIC_ID_RE = /^E\d+$/;
-var STORY_ID_RE = /^[A-Z]{2,}-(?:E\d+-)?\d+$/;
-var STORY_ID_BODY = STORY_ID_RE.source.slice(1, -1);
-var DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-
-// server/core/parse.ts
-var H1_RE = /^#\s+(E\d+)\s*[—–-]\s*(.+?)\s*$/m;
-var LEDGER_RE = new RegExp(`^###\\s+(${STORY_ID_BODY})\\s*[\u2014\u2013-]\\s*(\\S+)`);
-var HANDOFF_RE = /<!--\s*handoff:\s*epic=(\S+)\s+after=(\S+)\s+next=(\S+)\s+written=(\S+)\s*-->/;
-function splitLines(text) {
-  const lines = text.split(/\r\n|[\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029]/);
-  if (lines[lines.length - 1] === "") lines.pop();
-  return lines;
-}
-function parseEpic(path, text) {
-  const epic = {
-    path,
-    dir: dirname(path),
-    text,
-    id: "",
-    title: "",
-    status: {},
-    statusSpan: null,
-    rows: [],
-    ledger: []
-  };
-  const h1 = H1_RE.exec(text);
-  if (h1) {
-    epic.id = h1[1];
-    epic.title = h1[2];
-  }
-  const lines = splitLines(text);
-  const b = lines.indexOf(STATUS_BEGIN);
-  const e = b >= 0 ? lines.indexOf(STATUS_END, b) : -1;
-  if (b >= 0 && e >= 0) {
-    epic.statusSpan = [b, e];
-    for (const line of lines.slice(b + 1, e)) {
-      const colon = line.indexOf(":");
-      if (colon >= 0) {
-        epic.status[line.slice(0, colon).trim()] = line.slice(colon + 1).trim();
-      }
-    }
-  }
-  epic.rows = parseRows(lines);
-  for (const line of section(lines, "## Ledger")) {
-    const m = LEDGER_RE.exec(line);
-    if (m) epic.ledger.push({ id: m[1], date: m[2] });
-  }
-  return epic;
-}
-function section(lines, heading) {
-  const out = [];
-  let inside = false;
-  for (const line of lines) {
-    if (line.startsWith("## ")) {
-      inside = line.trim() === heading;
-      continue;
-    }
-    if (inside) out.push(line);
-  }
-  return out;
-}
-function parseRows(lines) {
-  const rows = [];
-  let inside = false;
-  let inComment = false;
-  lines.forEach((line, i) => {
-    if (line.startsWith("## ")) {
-      inside = line.trim() === "## Story list";
-      return;
-    }
-    if (!inside) return;
-    if (line.includes("<!--")) inComment = true;
-    if (inComment) {
-      if (line.includes("-->")) inComment = false;
-      return;
-    }
-    if (!line.startsWith("|")) return;
-    const cells = line.trim().replace(/^\|+|\|+$/g, "").split("|").map((c) => c.trim());
-    if (cells.length < 4 || /^[- ]*$/.test(cells[0]) || cells[0] === "Story") return;
-    const first = /^(\S+)(?:\s+([\s\S]*))?$/.exec(cells[0]);
-    if (!first || !STORY_ID_RE.test(first[1])) return;
-    rows.push({
-      id: first[1],
-      title: first[2] ?? "",
-      lane: cells[2],
-      status: cells[3],
-      done: cells.length > 4 ? cells[4] : "",
-      lineNo: i
-    });
-  });
-  return rows;
-}
-function parseHandoff(text) {
-  const h = { text, found: false, epic: "", after: "", next: "", written: "" };
-  const m = HANDOFF_RE.exec(text);
-  if (m) {
-    h.found = true;
-    [, h.epic, h.after, h.next, h.written] = m;
-  }
-  return h;
-}
-function ledgerEntry(text, story2) {
-  const out = [];
-  let inside = false;
-  for (const line of section(splitLines(text), "## Ledger")) {
-    if (line.startsWith("### ")) {
-      inside = line.startsWith(`### ${story2} `);
-      if (inside) out.push(line);
-      continue;
-    }
-    if (inside) out.push(line);
-  }
-  return out.join("\n").trim();
-}
-
-// server/core/check.ts
-function pyTuple(items) {
-  return `(${items.map((s) => `'${s}'`).join(", ")})`;
-}
-function epicBranch(epic) {
-  return epic.status.Branch || `epic/${basename(epic.dir)}`;
-}
-function rowOf(epic, id) {
-  return epic.rows.find((r) => r.id === id);
-}
-function expectedNext(epic) {
-  return epic.rows.find((r) => OPEN_ROW.includes(r.status))?.id ?? "none";
-}
-function counts(epic) {
-  const live = epic.rows.filter((r) => r.status !== "dropped");
-  return [live.filter((r) => r.status === "implemented").length, live.length];
-}
-function expectedState(epic) {
-  if (epic.rows.length === 0) return "planned";
-  if (!epic.rows.some((r) => OPEN_ROW.includes(r.status))) return "closed";
-  if (epic.rows.some((r) => r.status === "implemented" || r.status === "in_progress")) {
-    return "in_progress";
-  }
-  return "planned";
-}
-function checkPackage(epic, handoff2) {
-  const p = [];
-  const has = (key) => Object.hasOwn(epic.status, key);
-  const dirName = basename(epic.dir);
-  const folderId = dirName.split("-")[0];
-  if (!epic.id) {
-    p.push("EPIC.md: H1 must be `# Eid \u2014 Title`");
-  } else if (epic.id !== folderId) {
-    p.push(`EPIC.md: H1 id ${epic.id} does not match folder ${dirName}`);
-  }
-  if (epic.statusSpan === null) {
-    p.push("EPIC.md: Status block markers missing (epic-status:begin/end)");
-  }
-  for (const key of ["State", "Branch", "Stories", "Next"]) {
-    if (!has(key)) p.push(`EPIC.md: Status block lacks \`${key}:\``);
-  }
-  const state = has("State") ? epic.status.State : "";
-  if (state && !STATES.includes(state)) {
-    p.push(`EPIC.md: State \`${state}\` not in ${pyTuple(STATES)}`);
-  }
-  const branch = has("Branch") ? epic.status.Branch : "";
-  if (branch && !branch.startsWith("epic/")) {
-    p.push(`EPIC.md: Branch \`${branch}\` must start with epic/`);
-  }
-  const seen = /* @__PURE__ */ new Set();
-  for (const r of epic.rows) {
-    if (seen.has(r.id)) p.push(`EPIC.md: story ${r.id} listed twice`);
-    seen.add(r.id);
-    if (!ROW_STATUSES.includes(r.status)) {
-      p.push(`EPIC.md: ${r.id} status \`${r.status}\` not in ${pyTuple(ROW_STATUSES)}`);
-    }
-    if (r.status === "implemented" && !r.done) {
-      p.push(`EPIC.md: ${r.id} is implemented but the Done cell is empty`);
-    }
-  }
-  const ledgerIds = epic.ledger.map((l) => l.id);
-  for (const r of epic.rows) {
-    if (r.status === "implemented" && !ledgerIds.includes(r.id)) {
-      p.push(`EPIC.md: ${r.id} is implemented but has no \`### ${r.id} \u2014 date\` ledger entry`);
-    }
-  }
-  for (const { id, date: date5 } of epic.ledger) {
-    const row = rowOf(epic, id);
-    if (row === void 0) {
-      p.push(`EPIC.md: ledger entry ${id} is not in the story list`);
-    } else if (row.status !== "implemented") {
-      p.push(`EPIC.md: ledger entry ${id} exists but the row is \`${row.status}\``);
-    }
-    if (!DATE_RE.test(date5)) {
-      p.push(`EPIC.md: ledger entry ${id} date \`${date5}\` is not YYYY-MM-DD`);
-    }
-  }
-  const [done, total] = counts(epic);
-  const want = `${done} of ${total} implemented`;
-  const stories = has("Stories") ? epic.status.Stories : "";
-  if (stories && stories !== want) {
-    p.push(`EPIC.md: Stories \`${stories}\` should be \`${want}\` (run render)`);
-  }
-  const expNext = expectedNext(epic);
-  const next = has("Next") ? epic.status.Next : "";
-  if (next && next !== expNext) {
-    p.push(`EPIC.md: Next \`${next}\` should be \`${expNext}\` (first open row)`);
-  }
-  const expState = expectedState(epic);
-  if (state && state !== expState) {
-    p.push(`EPIC.md: State \`${state}\` should be \`${expState}\` from the story table`);
-  }
-  if (handoff2 === null) {
-    p.push("HANDOFF.md missing");
-    return p;
-  }
-  if (!handoff2.found) {
-    p.push("HANDOFF.md: header `<!-- handoff: epic=\u2026 after=\u2026 next=\u2026 written=\u2026 -->` missing");
-    return p;
-  }
-  if (handoff2.epic !== epic.id) {
-    p.push(`HANDOFF.md: epic=${handoff2.epic} but this is ${epic.id}`);
-  }
-  const last = ledgerIds.length > 0 ? ledgerIds[ledgerIds.length - 1] : "none";
-  if (handoff2.after !== last) {
-    p.push(`HANDOFF.md: after=${handoff2.after} but the last ledger entry is ${last}`);
-  }
-  if (handoff2.next !== expNext) {
-    p.push(`HANDOFF.md: next=${handoff2.next} but the next open story is ${expNext}`);
-  }
-  if (!DATE_RE.test(handoff2.written)) {
-    p.push(`HANDOFF.md: written=${handoff2.written} is not YYYY-MM-DD`);
-  }
-  const handoffLines = splitLines(handoff2.text);
-  for (const h of HANDOFF_HEADINGS) {
-    if (!handoffLines.some((line) => line.startsWith(h))) {
-      p.push(`HANDOFF.md: heading \`${h} \u2026\` missing`);
-    }
-  }
-  return p;
-}
-function renderStatus(epic) {
-  if (epic.statusSpan === null) {
-    throw new EpicError("cannot render: Status block markers missing");
-  }
-  const [done, total] = counts(epic);
-  const block = [
-    STATUS_BEGIN,
-    `State: ${expectedState(epic)}`,
-    `Branch: ${epicBranch(epic)}`,
-    `Stories: ${done} of ${total} implemented`,
-    `Next: ${expectedNext(epic)}`,
-    STATUS_END
-  ];
-  const lines = splitLines(epic.text);
-  const [b, e] = epic.statusSpan;
-  const out = [...lines.slice(0, b), ...block, ...lines.slice(e + 1)];
-  return out.join("\n") + (epic.text.endsWith("\n") ? "\n" : "");
-}
 
 // server/core/git.ts
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 var execFileP = promisify(execFile);
 var MAX_BUFFER = 64 * 1024 * 1024;
 async function runRaw(cmd, cwd) {
@@ -44180,6 +43917,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 var CONFIG_FILE = ".epic.yml";
 var hooksSchema = external_exports.object({
+  init: external_exports.array(external_exports.string()).default([]),
   start: external_exports.array(external_exports.string()).default([]),
   close: external_exports.array(external_exports.string()).default([]),
   nextPrompt: external_exports.string().optional()
@@ -44188,9 +43926,10 @@ var configSchema = external_exports.object({
   epicsDir: external_exports.string().default("docs/stories/epics"),
   templates: external_exports.string().optional(),
   branchPrefix: external_exports.string().default("feat/"),
+  epicBranchPrefix: external_exports.string().default("epic/"),
   baseBranch: external_exports.string().default("main"),
   profile: external_exports.string().optional(),
-  hooks: hooksSchema.default({ start: [], close: [] })
+  hooks: hooksSchema.default({ init: [], start: [], close: [] })
 }).strict();
 function loadConfig(root2) {
   const file2 = join(root2, CONFIG_FILE);
@@ -44212,12 +43951,127 @@ function loadConfig(root2) {
   return result.data;
 }
 
+// server/core/parse.ts
+import { basename, dirname } from "node:path";
+var HANDOFF_RE = /<!--\s*handoff:\s*epic=(\S+)\s+after=(\S+)\s+next=(\S+)\s+written=(\S+)\s*-->/;
+var SEPARATOR_RE = /^\|[\s|:-]*-[\s|:-]*$/;
+function splitLines(text) {
+  const lines = text.split(/\r\n|[\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029]/);
+  if (lines[lines.length - 1] === "") lines.pop();
+  return lines;
+}
+function folderEpicId(dir) {
+  return basename(dir).split("-")[0];
+}
+var COMMENT_RE = /<!--[\s\S]*?(?:-->|$)/g;
+var NOT_A_BREAK_RE = /[^\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029]/g;
+function stripComments(text) {
+  return text.replace(COMMENT_RE, (span) => span.replace(NOT_A_BREAK_RE, ""));
+}
+function storyOfName(ids, prefix, name) {
+  let best;
+  for (const id of ids) {
+    if (name.startsWith(`${prefix}${id}-`) && (best === void 0 || id.length > best.length)) best = id;
+  }
+  return best;
+}
+function parseEpic(path, text) {
+  const dir = dirname(path);
+  const epic = { path, dir, text, id: folderEpicId(dir), title: "", status: {}, rows: [] };
+  const lines = splitLines(text);
+  const h1 = lines.find((line) => /^#\s/.test(line));
+  if (h1) {
+    const heading = h1.replace(/^#\s+/, "").trim();
+    const afterId = heading.startsWith(epic.id) ? heading.slice(epic.id.length) : "";
+    const m = /^\s*[—–-]\s*(.+)$/.exec(afterId);
+    epic.title = m ? m[1].trim() : heading;
+  }
+  const b = lines.indexOf(STATUS_BEGIN);
+  const e = b >= 0 ? lines.indexOf(STATUS_END, b) : -1;
+  if (b >= 0 && e >= 0) {
+    for (const line of lines.slice(b + 1, e)) {
+      const colon = line.indexOf(":");
+      if (colon >= 0) {
+        epic.status[line.slice(0, colon).trim()] = line.slice(colon + 1).trim();
+      }
+    }
+  }
+  epic.rows = parseRows(splitLines(stripComments(text)));
+  return epic;
+}
+function section(lines, heading) {
+  const out = [];
+  let inside = false;
+  for (const line of lines) {
+    if (line.startsWith("## ")) {
+      inside = line.trim() === heading;
+      continue;
+    }
+    if (inside) out.push(line);
+  }
+  return out;
+}
+function parseRows(clean) {
+  const rows = [];
+  let inside = false;
+  clean.forEach((line, i) => {
+    if (line.startsWith("## ")) {
+      inside = line.trim() === "## Story list";
+      return;
+    }
+    if (!inside || !line.startsWith("|")) return;
+    if (SEPARATOR_RE.test(line.trim()) || SEPARATOR_RE.test((clean[i + 1] ?? "").trim())) return;
+    const cells = line.trim().replace(/^\|+|\|+$/g, "").split("|").map((c) => c.trim());
+    if (cells.length < 4) return;
+    const first = /^(\S+)(?:\s+([\s\S]*))?$/.exec(cells[0]);
+    if (!first) return;
+    rows.push({
+      id: first[1],
+      title: first[2] ?? "",
+      lane: cells[2],
+      status: cells[3],
+      done: cells.length > 4 ? cells[4] : "",
+      lineNo: i
+    });
+  });
+  return rows;
+}
+function rowOf(epic, id) {
+  return epic.rows.find((r) => r.id === id);
+}
+function parseHandoff(text) {
+  const h = { text, found: false, epic: "", after: "", next: "", written: "" };
+  const m = HANDOFF_RE.exec(text);
+  if (m) {
+    h.found = true;
+    [, h.epic, h.after, h.next, h.written] = m;
+  }
+  return h;
+}
+function ledgerEntry(text, story2) {
+  const out = [];
+  let inside = false;
+  for (const raw of section(splitLines(stripComments(text)), "## Ledger")) {
+    const line = raw.trimEnd();
+    if (line.startsWith("### ")) {
+      inside = line === `### ${story2}` || line.startsWith(`### ${story2} `);
+      if (inside) out.push(line);
+      continue;
+    }
+    if (inside) out.push(line);
+  }
+  return out.join("\n").trim();
+}
+
 // server/core/locate.ts
 function epicsDir(root2, config2) {
   return join2(root2, config2.epicsDir);
 }
-function pyList(dirs) {
-  return `[${dirs.map((d) => `'${basename2(d)}'`).join(", ")}]`;
+function epicBranch(config2, dir) {
+  return `${config2.epicBranchPrefix}${basename2(dir)}`;
+}
+function names(dirs) {
+  return dirs.map((d) => basename2(d)).join(", ");
 }
 function subdirs(base) {
   if (!existsSync2(base)) return [];
@@ -44233,28 +44087,23 @@ function hasMarkers(dir) {
 function findEpicDir(root2, config2, ref) {
   const base = epicsDir(root2, config2);
   const dirs = subdirs(base);
-  if (EPIC_ID_RE.test(ref)) {
-    const hits = dirs.filter((d2) => basename2(d2).split("-")[0] === ref);
-    if (hits.length === 0) throw new EpicError(`no epic folder ${ref}-* under ${base}`);
-    if (hits.length > 1) {
-      throw new EpicError(`more than one folder for ${ref}: ${pyList(hits)}`);
-    }
-    return hits[0];
-  }
-  if (STORY_ID_RE.test(ref)) {
-    const hits = dirs.filter((d2) => {
-      const f = join2(d2, "EPIC.md");
-      return existsSync2(f) && rowOf(parseEpic(f, readFileSync2(f, "utf8")), ref) !== void 0;
-    });
-    if (hits.length === 0) throw new EpicError(`no EPIC.md story list contains ${ref}`);
-    if (hits.length > 1) {
-      throw new EpicError(`${ref} is listed in more than one epic: ${pyList(hits)}`);
-    }
-    return hits[0];
+  const byId = dirs.filter((d2) => folderEpicId(d2) === ref);
+  if (byId.length > 1) throw new EpicError(`more than one folder for ${ref}: ${names(byId)}`);
+  if (byId.length === 1) return byId[0];
+  const byRow = dirs.filter((d2) => {
+    const f = join2(d2, "EPIC.md");
+    return existsSync2(f) && rowOf(parseEpic(f, readFileSync2(f, "utf8")), ref) !== void 0;
+  });
+  if (byRow.length > 1) throw new EpicError(`${ref} is listed in more than one epic: ${names(byRow)}`);
+  if (byRow.length === 1) return byRow[0];
+  if (/[/\\]|\.\./.test(ref)) {
+    throw new EpicError(
+      `\`${ref}\` is not an epic id or a story in a story list, and a folder name cannot hold \`/\`, \`\\\` or \`..\``
+    );
   }
   const d = join2(base, ref);
   if (existsSync2(d) && statSync(d).isDirectory()) return d;
-  throw new EpicError(`\`${ref}\` is not an epic id, a story id, or a folder under ${base}`);
+  throw new EpicError(`\`${ref}\` is not an epic id, a story in a story list, or a folder under ${base}`);
 }
 function loadLocal(dir) {
   const f = join2(dir, "EPIC.md");
@@ -44278,12 +44127,12 @@ async function loadFromRef(root2, dir, ref) {
     handoff: r.code === 0 ? parseHandoff(r.stdout) : null
   };
 }
-async function packetSlug(root2, dir, branch, story2) {
+async function packetSlug(root2, dir, branch, story2, ids) {
   const rel = gitRel(root2, dir);
   const out = await run(["git", "ls-tree", "--name-only", `origin/${branch}`, `${rel}/`], root2, false);
   for (const line of splitLines(out)) {
     const name = line.split("/").pop() ?? "";
-    if (name.startsWith(`${story2}-`)) return name.slice(story2.length + 1);
+    if (storyOfName([...ids, story2], "", name) === story2) return name.slice(story2.length + 1);
   }
   return null;
 }
@@ -44305,8 +44154,8 @@ import { existsSync as existsSync3, readFileSync as readFileSync3 } from "node:f
 import { join as join3 } from "node:path";
 
 // server/core/default-templates.ts
-var DEFAULT_EPIC_TEMPLATE = '# ENN \u2014 Epic title\n\n<!--\n  Epic package template (docs/templates/epic.md). Create with\n  `python3 scripts/epic.py init ENN "Epic title"` \u2014 do not copy by hand.\n\n  Three sections are machine-read by scripts/epic.py; keep their shape:\n    ## Status      the block between the epic-status markers (rewritten whole)\n    ## Story list  the table; row order IS the build order; the first cell\n                   starts with the story id (`TH-652 Title`)\n    ## Ledger      one `### TH-652 \u2014 YYYY-MM-DD` entry per finished story,\n                   appended in the order stories closed\n  Everything else is planning content, mostly frozen after planning.\n  History never goes into ## Status. It goes into ## Ledger.\n  The brief for the next fresh session is HANDOFF.md next to this file.\n-->\n\n## Status\n\n<!-- epic-status:begin -->\nState: planned\nBranch: epic/ENN-slug\nStories: 0 of 0 implemented\nNext: none\n<!-- epic-status:end -->\n\n## Goal\n\nOne paragraph. What is true for the user when this epic is closed.\n\n## Source of truth\n\n- `design/\u2026` \u2014 the design agreed on YYYY-MM-DD.\n- Product docs this epic changes.\n\n## Design decisions\n\n| # | Decision | Where it lives |\n| --- | --- | --- |\n| 1 | | ADR / design file |\n\n## Scope\n\nIn scope:\n\n- \u2026\n\nOut of scope:\n\n- \u2026\n\n## Story list\n\nRow order is the build order. `Status` is one of `planned`, `in_progress`,\n`implemented`, `dropped`. `Done` is `YYYY-MM-DD PR #N` once implemented.\n\n| Story | Description | Lane | Status | Done |\n| --- | --- | --- | --- | --- |\n| TH-NNN Story title | What it builds, in one or two sentences. | normal | planned | |\n\n## Ledger\n\nOne entry per finished story, appended at `/epic close`, newest last. Fixed\nshape; the same facts feed `HANDOFF.md` \xA72.\n\n<!--\n### TH-NNN \u2014 YYYY-MM-DD\n\n- Branch / PR: `feat/TH-NNN-slug`, PR #N into `epic/ENN-slug`.\n- Shipped: `path/one.ts` (new \u2026), `path/two.ts` (changed \u2026).\n- Decisions: ADR TH-0NNN accepted with the story; \u2026\n- Deviations: what the plan said vs what shipped, and why.\n- Effects on later stories: TH-MMM row edited (\u2026); none.\n-->\n\n## Dependencies\n\n- Upstream: \u2026\n- Downstream: \u2026\n\n## Validation outline\n\n| Layer | Expected proof |\n| --- | --- |\n| Unit | |\n| Integration | |\n| E2E | |\n| Platform | |\n| Release | |\n\n## Open questions\n\n1. \u2026 (owned by TH-NNN)\n\n## Notes\n\nAnything that does not fit above.\n';
-var DEFAULT_HANDOFF_TEMPLATE = "# ENN handoff\n\n<!-- handoff: epic=ENN after=none next=none written=YYYY-MM-DD -->\n\n<!--\n  Handoff template (docs/templates/handoff.md). Rewritten WHOLE at every\n  `/epic close`; never appended. About one page. This is the only file a\n  fresh session needs to read before starting the next story; `/epic start`\n  prints it and refuses when the header's `next=` is not the story being\n  started or `after=` is not the last Ledger entry in EPIC.md.\n\n  Keep the five numbered headings. Use real paths, real symbol names, real\n  ADR ids. No \"see above\", no history \u2014 history lives in EPIC.md \xA7Ledger.\n-->\n\n## 1. Epic state\n\n- Epic: ENN \u2014 Epic title. Branch `epic/ENN-slug`, N commits behind `main`.\n- Stories: N of M implemented. Next: TH-NNN.\n- Open PR: none | #N (must be merged before the next story starts).\n\n## 2. Last story: what shipped\n\nStory: none yet \u2014 the epic was just planned. | TH-NNN Title, PR #N.\n\nOne short paragraph: what the story made true.\n\n| Path | Change |\n| --- | --- |\n| `apps/server/src/\u2026` | new: \u2026 |\n| `packages/api/src/\u2026` | changed: \u2026 |\n\n- New routes / functions / tables / migrations: `name` (`path`), \u2026\n- ADRs: TH-0NNN accepted with the story; \u2026\n- Deviations from the plan: \u2026 | none.\n- Tests added and how to run them:\n  ```\n  cd apps/server && bun run test src/\u2026/x.test.ts\n  ```\n- Environment: migrations `0NNN` applied to the dev database; seed \u2026; env \u2026\n\n## 3. Plan changes\n\n- TH-MMM row edited: \u2026 (why).\n- Open question N resolved: \u2026 | none.\n\n## 4. Next story brief\n\n- Story: TH-NNN Title. Packet: `docs/stories/epics/ENN-slug/TH-NNN-slug/`. Lane: normal.\n- Goal: \u2026\n- Builds on: `path` (`symbol`) from TH-PPP; \u2026\n- Acceptance criteria:\n  - \u2026\n- Constraints: intake gate first (`scripts/bin/harness-cli query matrix`);\n  lane rules; Inflow design system for any UI; ADRs inside the story are\n  accepted with it (TH-0193).\n- Read first: `docs/stories/epics/ENN-slug/EPIC.md` \xA7Design decisions,\n  `design/\u2026`, ADR \u2026\n- Build order: the pieces and which depends on which (input for the next\n  agent's own plan; not a working procedure).\n\n## 5. Gotchas\n\n- \u2026 (from implementation-notes.html and the trace of the last story)\n";
+var DEFAULT_EPIC_TEMPLATE = "# ENN \u2014 Epic title\n\n<!--\n  Epic package template. epic_init writes it; a repo can ship its own with\n  the `templates:` key in .epic.yml.\n\n  paseo-epic reads three parts and checks none of them. The repo's own\n  checks, named in the .epic.yml hooks, own the rules.\n    ## Status      the lines between the epic-status markers, shown as they are\n    ## Story list  the table; row order is the build order; the first cell\n                   starts with the story id (`S-1 Title`)\n    ## Ledger      one `### S-1 \u2014 YYYY-MM-DD` entry per finished story; the\n                   entry is the body of the story PR\n  Comment blocks like this one are skipped.\n  The brief for the next story is HANDOFF.md next to this file.\n-->\n\n## Status\n\n<!-- epic-status:begin -->\nState: planned\nBranch: epic/ENN-slug\nStories: 0 of 0 implemented\nNext: none\n<!-- epic-status:end -->\n\n## Goal\n\nOne paragraph. What is true for the user when this epic is closed.\n\n## Design decisions\n\n| # | Decision | Where it lives |\n| --- | --- | --- |\n| 1 | | |\n\n## Scope\n\nIn scope:\n\n- \u2026\n\nOut of scope:\n\n- \u2026\n\n## Story list\n\nRow order is the build order. The Epic panel marks `in_progress` and\n`implemented` rows.\n\n| Story | Description | Lane | Status | Done |\n| --- | --- | --- | --- | --- |\n| S-1 Story title | What it builds, in one or two sentences. | normal | planned | |\n\n## Ledger\n\nOne entry per finished story, newest last.\n\n<!--\n### S-1 \u2014 YYYY-MM-DD\n\n- What shipped, what changed in the plan, and what later stories need to know.\n-->\n\n## Dependencies\n\n- Upstream: \u2026\n- Downstream: \u2026\n\n## Open questions\n\n1. \u2026\n\n## Notes\n\nAnything that does not fit above.\n";
+var DEFAULT_HANDOFF_TEMPLATE = "# ENN handoff\n\n<!-- handoff: epic=ENN after=none next=none written=YYYY-MM-DD -->\n\n<!--\n  Handoff template. Rewrite it whole when a story closes. It is the first\n  thing the agent of the next story reads.\n\n  paseo-epic reads only the header above: `next=` is the story epic_start\n  begins, and `after=` is the story that closed last (epic_next checks that\n  it is merged). Write `none` when there is no such story.\n-->\n\n## 1. Epic state\n\n- Epic: ENN \u2014 Epic title. Branch `epic/ENN-slug`.\n- Next: S-1.\n\n## 2. Last story: what shipped\n\nStory: none yet; the epic was just planned.\n\n## 3. Plan changes\n\n- none.\n\n## 4. Next story brief\n\n- Story: S-1 Story title.\n- Goal: \u2026\n- Acceptance criteria:\n  - \u2026\n- Read first: `EPIC.md` \xA7Design decisions, \u2026\n\n## 5. Gotchas\n\n- \u2026\n";
 
 // server/core/templates.ts
 var DEFAULTS = { "epic.md": DEFAULT_EPIC_TEMPLATE, "handoff.md": DEFAULT_HANDOFF_TEMPLATE };
@@ -44319,18 +44168,37 @@ function templateText(root2, config2, name) {
 }
 
 // server/core/commands.ts
-var STORY_BRANCH_RE = new RegExp(`^(${STORY_ID_BODY})-`);
 var DIRTY2 = "working tree has uncommitted changes; commit or stash them first";
+function requireHeader(handoff2, where) {
+  if (handoff2 === null) throw new EpicError(`HANDOFF.md does not exist ${where}`);
+  if (!handoff2.found) {
+    throw new EpicError(
+      `HANDOFF.md ${where} has no handoff header \`<!-- handoff: epic=\u2026 after=\u2026 next=\u2026 written=\u2026 -->\``
+    );
+  }
+  return handoff2;
+}
+function storyIds(epic) {
+  return epic.rows.map((r) => r.id);
+}
+async function storySlug(root2, dir, branch, story2, epic) {
+  const fromPacket = await packetSlug(root2, dir, branch, story2, storyIds(epic));
+  return fromPacket ?? slugify2(rowOf(epic, story2)?.title || story2);
+}
 async function cmdInit(root2, config2, epicId, title, opts = {}) {
-  if (!EPIC_ID_RE.test(epicId)) throw new EpicError(`\`${epicId}\` is not an epic id like E20`);
+  if (!epicId || /[-/\\\s]/.test(epicId)) {
+    throw new EpicError(
+      `\`${epicId}\` cannot be an epic id: the id is the package folder name before its first \`-\`, so it must be non-empty with no \`-\`, \`/\`, \`\\\` or spaces`
+    );
+  }
   const base = epicsDir(root2, config2);
   mkdirSync(base, { recursive: true });
-  const existing = subdirs(base).filter((d2) => basename3(d2).split("-")[0] === epicId);
+  const existing = subdirs(base).filter((d2) => folderEpicId(d2) === epicId);
   const d = existing[0] ?? join4(base, `${epicId}-${slugify2(title)}`);
   const epicFile = join4(d, "EPIC.md");
   if (existsSync4(epicFile)) throw new EpicError(`${epicFile} already exists`);
   const name = basename3(d);
-  const branch = `epic/${name}`;
+  const branch = epicBranch(config2, d);
   if (!opts.noGit) {
     if (await gitDirty(root2)) throw new EpicError(DIRTY2);
     await run(["git", "fetch", "origin", "--prune"], root2);
@@ -44343,38 +44211,31 @@ async function cmdInit(root2, config2, epicId, title, opts = {}) {
     }
   }
   mkdirSync(d, { recursive: true });
-  const epicText = templateText(root2, config2, "epic.md").replaceAll("ENN-slug", () => name).replaceAll("# ENN \u2014 Epic title", () => `# ${epicId} \u2014 ${title}`).replaceAll("ENN", () => epicId);
-  const handoffText = templateText(root2, config2, "handoff.md").replaceAll("ENN-slug", () => name).replaceAll("ENN \u2014 Epic title", () => `${epicId} \u2014 ${title}`).replaceAll("ENN", () => epicId).replaceAll("written=YYYY-MM-DD", () => `written=${today()}`);
+  const epicText = templateText(root2, config2, "epic.md").replaceAll("epic/ENN-slug", () => branch).replaceAll("ENN-slug", () => name).replaceAll("# ENN \u2014 Epic title", () => `# ${epicId} \u2014 ${title}`).replaceAll("ENN", () => epicId);
+  const handoffText = templateText(root2, config2, "handoff.md").replaceAll("epic/ENN-slug", () => branch).replaceAll("ENN-slug", () => name).replaceAll("ENN \u2014 Epic title", () => `${epicId} \u2014 ${title}`).replaceAll("ENN", () => epicId).replaceAll("written=YYYY-MM-DD", () => `written=${today()}`);
   writeFileSync(epicFile, epicText);
   writeFileSync(join4(d, "HANDOFF.md"), handoffText);
   return { dir: d, branch };
 }
 async function cmdStart(root2, config2, ref, opts = {}) {
-  if (!ref) throw new EpicError("start needs an epic id (E20) or a story id (TH-652)");
+  if (!ref) throw new EpicError("start needs an epic id or a story id");
   const d = findEpicDir(root2, config2, ref);
-  const branch = existsSync4(join4(d, "EPIC.md")) ? epicBranch(loadLocal(d).epic) : `epic/${basename3(d)}`;
+  const branch = epicBranch(config2, d);
   if (!opts.dryRun && await gitDirty(root2)) throw new EpicError(DIRTY2);
   await run(["git", "fetch", "origin", "--prune"], root2);
   if (!await remoteBranchExists(root2, branch)) {
     throw new EpicError(`origin/${branch} does not exist; push the epic branch first`);
   }
-  const { epic, handoff: handoff2 } = await loadFromRef(root2, d, `origin/${branch}`);
-  const problems = checkPackage(epic, handoff2);
-  if (problems.length > 0) {
-    throw new EpicError(
-      `the package on origin/${branch} does not pass check; fix the listed problems on the epic branch, then run start again:
-  - ${problems.join("\n  - ")}`
-    );
+  const { epic, handoff: tipHandoff } = await loadFromRef(root2, d, `origin/${branch}`);
+  const handoff2 = requireHeader(tipHandoff, `on origin/${branch}`);
+  const story2 = handoff2.next;
+  if (story2 === "none") {
+    throw new EpicError(`the handoff on origin/${branch} says next=none: ${epic.id} has no open story`);
   }
-  const story2 = expectedNext(epic);
-  if (story2 === "none") throw new EpicError(`${epic.id} has no open story (State ${epic.status.State})`);
-  if (STORY_ID_RE.test(ref) && ref !== story2) {
+  if (ref !== epic.id && ref !== basename3(d) && ref !== story2) {
     throw new EpicError(
-      `the handoff on origin/${branch} was written for ${story2}, not ${ref}; close ${story2} first or fix the story list`
+      `the handoff on origin/${branch} was written for ${story2}, not ${ref}; close ${story2} first or fix the handoff`
     );
-  }
-  if (handoff2 === null || handoff2.next !== story2) {
-    throw new EpicError(`HANDOFF.md next=${handoff2?.next} but the next open story is ${story2}`);
   }
   const warnings = [];
   if (opts.noGh || !await ghAvailable()) {
@@ -44388,8 +44249,7 @@ async function cmdStart(root2, config2, ref, opts = {}) {
   }
   const behind = (await run(["git", "rev-list", "--count", `origin/${branch}..origin/${config2.baseBranch}`], root2, false)).trim();
   const row = rowOf(epic, story2);
-  const slug = await packetSlug(root2, d, branch, story2) ?? slugify2(row.title);
-  const storyBranch = `${config2.branchPrefix}${story2}-${slug}`;
+  const storyBranch = `${config2.branchPrefix}${story2}-${await storySlug(root2, d, branch, story2, epic)}`;
   let action;
   if (opts.dryRun) {
     action = "dry-run";
@@ -44409,32 +44269,13 @@ async function cmdStart(root2, config2, ref, opts = {}) {
     epicBranch: branch,
     behind: behind || "?",
     story: story2,
-    title: row.title,
-    lane: row.lane,
+    title: row?.title ?? "",
+    lane: row?.lane ?? "",
     storyBranch,
     action,
     handoff: handoff2.text.trimEnd(),
     warnings
   };
-}
-async function cmdCheck(root2, config2, ref) {
-  const dirs = ref ? [findEpicDir(root2, config2, ref)] : subdirs(epicsDir(root2, config2)).filter(hasMarkers);
-  return dirs.map((d) => {
-    const { epic, handoff: handoff2 } = loadLocal(d);
-    const problems = checkPackage(epic, handoff2);
-    const name = basename3(d);
-    let summary;
-    if (problems.length > 0) {
-      summary = `${name}: ${problems.length} problem(s)`;
-    } else {
-      const [done, total] = counts(epic);
-      summary = `${name}: ok \u2014 ${epic.status.State}, ${done} of ${total}, next ${expectedNext(epic)}`;
-    }
-    return { dir: d, problems, summary };
-  });
-}
-function requireStoryId(story2) {
-  if (!STORY_ID_RE.test(story2)) throw new EpicError(`\`${story2}\` is not a story id like TH-652`);
 }
 function shellQuote(arg) {
   return /^[\w@%+=:,./-]+$/.test(arg) ? arg : `'${arg.replaceAll("'", "'\\''")}'`;
@@ -44451,9 +44292,8 @@ async function writeBodyFile(root2, story2, text) {
 function prNumber(url2) {
   return Number(/\/pull\/(\d+)/.exec(url2)?.[1] ?? 0);
 }
-function prBody(epic, story2, dir, nextStory) {
+function prBody(epic, story2, dir, nextStory, branch) {
   const entry = ledgerEntry(epic.text, story2);
-  const branch = epicBranch(epic);
   const parts = [
     `Story ${story2} into \`${branch}\` (epic ${epic.id} \u2014 ${epic.title}).`,
     "",
@@ -44474,48 +44314,25 @@ function prBody(epic, story2, dir, nextStory) {
   }
   return parts.join("\n");
 }
-async function closeProblems(root2, config2, story2) {
-  requireStoryId(story2);
-  const loaded = loadLocal(findEpicDir(root2, config2, story2));
-  const handoff2 = loaded.handoff;
-  const epic = loaded.epic.statusSpan === null ? loaded.epic : parseEpic(loaded.epic.path, renderStatus(loaded.epic));
-  const problems = checkPackage(epic, handoff2);
-  const row = rowOf(epic, story2);
-  if (row && row.status !== "implemented") {
-    problems.push(`EPIC.md: ${story2} row is \`${row.status}\`, expected \`implemented\``);
-  }
-  const last = epic.ledger.at(-1);
-  if (last && last.id !== story2) {
-    problems.push(`EPIC.md: last ledger entry is ${last.id}, expected ${story2}`);
-  }
-  if (handoff2?.found && handoff2.after !== story2) {
-    problems.push(`HANDOFF.md: after=${handoff2.after}, expected ${story2}`);
-  }
-  return problems;
-}
 async function cmdClose(root2, config2, story2, opts = {}) {
-  requireStoryId(story2);
+  const d = findEpicDir(root2, config2, story2);
+  const { epic, handoff: handoff2 } = loadLocal(d);
   const branch = await currentBranch(root2);
-  if (!branch.startsWith(`${config2.branchPrefix}${story2}-`)) {
+  if (storyOfName([...storyIds(epic), story2], config2.branchPrefix, branch) !== story2) {
     throw new EpicError(
       `current branch \`${branch}\` is not the story branch for ${story2}; check out \`${config2.branchPrefix}${story2}-\u2026\` and run close again`
     );
   }
-  const d = findEpicDir(root2, config2, story2);
-  const before = loadLocal(d).epic;
-  if (before.statusSpan !== null) {
-    const text = renderStatus(before);
-    if (text !== before.text) writeFileSync(before.path, text);
-  }
-  const problems = await closeProblems(root2, config2, story2);
-  if (problems.length > 0) {
-    throw new EpicError(`the package is not ready to close:
-  - ${problems.join("\n  - ")}`);
-  }
-  const { epic } = loadLocal(d);
-  const target = epicBranch(epic);
-  const nextStory = expectedNext(epic);
+  const target = epicBranch(config2, d);
   const rel = gitRel(root2, d);
+  const header = requireHeader(handoff2, `in ${rel}`);
+  if (header.after !== story2) {
+    throw new EpicError(`HANDOFF.md says after=${header.after}; set after=${story2} before epic_close`);
+  }
+  if (header.next === story2) {
+    throw new EpicError(`HANDOFF.md still says next=${story2}; point next= at the following story or none`);
+  }
+  const nextStory = header.next;
   const others = splitLines(await gitDirty(root2)).filter((ln) => !ln.includes(rel));
   if (others.length > 0) {
     throw new EpicError(
@@ -44533,8 +44350,8 @@ async function cmdClose(root2, config2, story2, opts = {}) {
     committed = true;
   }
   const row = rowOf(epic, story2);
-  const title = row ? `${story2}: ${row.title}` : story2;
-  const body = prBody(epic, story2, rel, nextStory);
+  const title = row?.title ? `${story2}: ${row.title}` : story2;
+  const body = prBody(epic, story2, rel, nextStory, target);
   const pushCmd = ["git", "push", "-u", "origin", branch];
   const prCmd = (bodyFile) => [
     "gh",
@@ -44549,8 +44366,7 @@ async function cmdClose(root2, config2, story2, opts = {}) {
     "--body-file",
     bodyFile
   ];
-  const [done, total] = counts(epic);
-  const epicClosed = expectedState(epic) === "closed";
+  const epicClosed = nextStory === "none";
   const epicPrCmd = [
     "gh",
     "pr",
@@ -44563,7 +44379,7 @@ async function cmdClose(root2, config2, story2, opts = {}) {
     "--title",
     `${epic.id}: ${epic.title}`,
     "--body",
-    `Epic ${epic.id} closed: ${done} of ${total} stories implemented. See \`${rel}/EPIC.md\` \xA7Ledger. Merge after the last story PR lands.`
+    `Epic ${epic.id} closed. See \`${rel}/EPIC.md\` \xA7Ledger. Merge after the last story PR lands.`
   ];
   const result = { committed, message, pushed: false, pr: null, epicPr: null, manual: [] };
   if (opts.noPr) {
@@ -44591,41 +44407,34 @@ async function cmdClose(root2, config2, story2, opts = {}) {
   }
   return result;
 }
-function pickMergedPr(prs, story2, prefix = "feat/") {
-  return prs.find((pr) => pr.headRefName.startsWith(`${prefix}${story2}-`)) ?? null;
+function pickMergedPr(prs, story2, prefix, ids) {
+  return prs.find((pr) => storyOfName([...ids, story2], prefix, pr.headRefName) === story2) ?? null;
 }
 async function cmdNext(root2, config2, story2, opts = {}) {
-  requireStoryId(story2);
   const d = findEpicDir(root2, config2, story2);
-  const branch = epicBranch(loadLocal(d).epic);
+  const branch = epicBranch(config2, d);
   await run(["git", "fetch", "origin", "--prune"], root2);
   if (!await remoteBranchExists(root2, branch)) {
     throw new EpicError(`origin/${branch} does not exist; push the epic branch first`);
   }
-  const { epic, handoff: handoff2 } = await loadFromRef(root2, d, `origin/${branch}`);
-  const problems = checkPackage(epic, handoff2);
-  if (problems.length > 0) {
+  const { epic, handoff: tipHandoff } = await loadFromRef(root2, d, `origin/${branch}`);
+  const handoff2 = requireHeader(tipHandoff, `on origin/${branch}`);
+  if (handoff2.after !== story2) {
+    const order = storyIds(epic);
+    const later = order.includes(story2) && order.indexOf(handoff2.after) > order.indexOf(story2);
+    if (later) {
+      throw new EpicError(
+        `${story2} is not the last closed story on origin/${branch}; the handoff there says after=${handoff2.after}, so run next ${handoff2.after}`
+      );
+    }
     throw new EpicError(
-      `the package on origin/${branch} does not pass check; fix the listed problems on the epic branch, then run next again:
-  - ${problems.join("\n  - ")}`
-    );
-  }
-  const ledgerIds = epic.ledger.map((l) => l.id);
-  const last = ledgerIds.at(-1) ?? "none";
-  if (ledgerIds.includes(story2) && last !== story2) {
-    throw new EpicError(
-      `${story2} closed earlier; the last story closed on origin/${branch} is ${last}, so run \`next ${last}\``
-    );
-  }
-  if (last !== story2) {
-    throw new EpicError(
-      `${story2} is not merged into origin/${branch} yet (last ledger entry there is ${last}); merge the story PR first, then run next again`
+      `${story2} is not merged into origin/${branch} yet (the handoff there says after=${handoff2.after}); merge the story PR first, then run next again`
     );
   }
   let pr = null;
   let comments = [];
   if (!opts.noGh && await ghAvailable()) {
-    pr = pickMergedPr(await ghMergedPrs(root2, branch), story2, config2.branchPrefix);
+    pr = pickMergedPr(await ghMergedPrs(root2, branch), story2, config2.branchPrefix, storyIds(epic));
     if (pr === null) {
       throw new EpicError(
         `no merged PR into ${branch} has a \`${config2.branchPrefix}${story2}-*\` head; merge the story PR first`
@@ -44634,41 +44443,38 @@ async function cmdNext(root2, config2, story2, opts = {}) {
     comments = await ghPrComments(root2, pr.number);
   }
   const out = { epic: epic.id, epicBranch: branch, closed: { story: story2, pr, comments }, next: null };
-  const nxt = expectedNext(epic);
+  const nxt = handoff2.next;
   if (nxt !== "none") {
     const row = rowOf(epic, nxt);
-    const slug = await packetSlug(root2, d, branch, nxt) ?? slugify2(row.title);
     out.next = {
       story: nxt,
-      title: row.title,
-      lane: row.lane,
-      branch: `${config2.branchPrefix}${nxt}-${slug}`,
+      title: row?.title ?? "",
+      lane: row?.lane ?? "",
+      branch: `${config2.branchPrefix}${nxt}-${await storySlug(root2, d, branch, nxt, epic)}`,
       baseRef: `origin/${branch}`
     };
   }
   return out;
 }
-function epicNumber(dir) {
-  return Number(basename3(dir).split("-")[0].slice(1)) || 0;
-}
 async function statusDir(root2, config2) {
   const base = epicsDir(root2, config2);
-  const packages = subdirs(base).filter(hasMarkers).map((d) => ({ d, epic: loadLocal(d).epic }));
+  const packages = subdirs(base).filter(hasMarkers).map((d) => ({ d, ...loadLocal(d) }));
   if (packages.length === 0) throw new EpicError(`no epic package under ${base}; run init first`);
   const branch = (await runRaw(["git", "rev-parse", "--abbrev-ref", "HEAD"], root2)).stdout.trim();
-  const story2 = branch.startsWith(config2.branchPrefix) ? STORY_BRANCH_RE.exec(branch.slice(config2.branchPrefix.length))?.[1] : void 0;
-  const hit = packages.find(
-    ({ epic }) => epicBranch(epic) === branch || story2 !== void 0 && rowOf(epic, story2) !== void 0
-  );
-  if (hit) return hit.d;
-  const open2 = packages.filter(({ epic }) => epic.status.State !== "closed");
+  const onEpic = packages.find(({ d }) => epicBranch(config2, d) === branch);
+  if (onEpic) return onEpic.d;
+  const story2 = storyOfName(packages.flatMap(({ epic }) => storyIds(epic)), config2.branchPrefix, branch);
+  const onStory = story2 === void 0 ? void 0 : packages.find(({ epic }) => rowOf(epic, story2) !== void 0);
+  if (onStory) return onStory.d;
+  const open2 = packages.filter(({ handoff: handoff2 }) => handoff2?.next !== "none");
   const pool = open2.length > 0 ? open2 : packages;
-  return pool.reduce((a, b) => epicNumber(b.d) > epicNumber(a.d) ? b : a).d;
+  const newer = (a, b) => folderEpicId(b).localeCompare(folderEpicId(a), void 0, { numeric: true }) > 0;
+  return pool.reduce((a, b) => newer(a.d, b.d) ? b : a).d;
 }
 async function cmdStatus(root2, config2, ref) {
   const d = ref ? findEpicDir(root2, config2, ref) : await statusDir(root2, config2);
   const { epic, handoff: handoff2 } = loadLocal(d);
-  const branch = epicBranch(epic);
+  const branch = epicBranch(config2, d);
   const count = await runRaw(["git", "rev-list", "--count", `origin/${branch}..origin/${config2.baseBranch}`], root2);
   let openPr = null;
   if (await ghAvailable()) {
@@ -44685,18 +44491,15 @@ async function cmdStatus(root2, config2, ref) {
     epicBranch: branch,
     state: epic.status.State ?? "",
     stories: epic.status.Stories ?? "",
-    next: epic.status.Next ?? "",
+    next: handoff2?.found ? handoff2.next : "",
     behind: count.code === 0 ? count.stdout.trim() : null,
     rows: epic.rows,
     openPr,
-    problems: checkPackage(epic, handoff2)
+    closeHooks: config2.hooks.close
   };
 }
 
 // server/core/text.ts
-var PENDING_LINE_RE = new RegExp(
-  `^Spawn pending for (${STORY_ID_BODY}) after (${STORY_ID_BODY}): the plugin starts the successor now\\.$`
-);
 function pendingLine(next, closed) {
   return `Spawn pending for ${next} after ${closed}: the plugin starts the successor now.`;
 }
@@ -44704,30 +44507,29 @@ function paragraph(parts) {
   return parts.filter((p) => p.length > 0).join(" ");
 }
 var NO_GH = "The PR and its comments were not read because `gh` was not available; check the PR by hand for answers to open questions.";
-function afterInit(branch) {
-  return paragraph([
-    `Created the epic package on branch ${branch}.`,
-    "Fill the story table and the Status block in EPIC.md, and HANDOFF.md for the first story.",
-    "Run epic_check until it reports ok, then commit and push the epic branch.",
-    "The first story starts in a fresh agent with epic_start; do not build it in this session."
-  ]);
+function afterInit(branch, hooks) {
+  return [
+    `Created the epic package on branch ${branch}. Fill EPIC.md and HANDOFF.md for the first story.`,
+    ...hooks,
+    "Then commit and push the epic branch. The first story starts in a fresh agent with epic_start; do not build it in this session."
+  ].join("\n");
 }
 function noEpicYet(epicsDir2) {
   return paragraph([
     `This repo has no epic yet: no EPIC.md under ${epicsDir2}.`,
-    "Call epic_init with an epic id like E1 and a title to create one."
+    "Call epic_init with an epic id and a title to create one."
   ]);
 }
-function afterStart(hooks) {
-  return paragraph([
-    'This handoff is your context. Read the files under "Read first" and the story packet.',
-    "Do not re-read the whole EPIC.md unless the handoff sends you there.",
-    ...hooks
-  ]);
-}
-function afterCloseCheck(problems) {
-  if (problems.length === 0) return "The package is ready to close. Call epic_close now.";
-  return "Fix these, then call epic_close_check again. The ledger entry has five bullets: Branch / PR, Shipped, Decisions, Deviations, Effects on later stories. HANDOFF.md is rewritten whole with headings 1 to 5.";
+function afterStart(story2, startHooks, closeHooks) {
+  return [
+    paragraph([
+      "This handoff is your context. Read the files it lists.",
+      "Do not re-read the whole EPIC.md unless the handoff sends you there.",
+      ...startHooks
+    ]),
+    "When the story is done:",
+    closeInstructions(story2, closeHooks)
+  ].join("\n");
 }
 function afterClose(prUrl, manual) {
   const wait = "Stay in this session. Do not build the next story here.";
@@ -44770,9 +44572,12 @@ function afterNext(result, spawned) {
   }
   return paragraph([
     `${next.story} ${next.title} is next; the successor is not started yet.`,
-    `Create a worktree on a new branch ${next.branch} from ${next.baseRef}, then start an agent there with \`/epic start ${next.story}\`.`,
+    `Create a worktree on a new branch ${next.branch} from ${next.baseRef}, then start an agent there and tell it to call epic_start with ${next.story}.`,
     noGh
   ]);
+}
+function closeInstructions(story2, hooks) {
+  return [...hooks, `Call epic_close with ${story2}.`].join("\n");
 }
 
 // server/mcp/main.ts
@@ -44799,7 +44604,7 @@ var story = { story: external_exports.string() };
 server.registerTool(
   "epic_status",
   {
-    description: "Call to see the epic package this repo is on: its state, story rows, next story and problems.",
+    description: "Call to see the epic package this repo is on: its state, story rows and next story.",
     inputSchema: {}
   },
   () => answer(async () => {
@@ -44809,8 +44614,8 @@ server.registerTool(
     }
     const result = await cmdStatus(root, config2);
     let next;
-    if (result.problems.length > 0) next = "The package has problems. Fix the listed problems, then call epic_check.";
-    else if (result.next === "none" || result.next === "") next = `${result.epic} has no open story.`;
+    if (result.next === "") next = `${result.epic} has no HANDOFF.md handoff header, so it names no next story.`;
+    else if (result.next === "none") next = `${result.epic} has no open story.`;
     else next = `The next open story is ${result.next}. To begin it, call epic_start with ${result.next}.`;
     return { result, next };
   })
@@ -44822,8 +44627,9 @@ server.registerTool(
     inputSchema: { epic: external_exports.string(), title: external_exports.string() }
   },
   ({ epic, title }) => answer(async () => {
-    const result = await cmdInit(root, loadConfig(root), epic, title);
-    return { result, next: afterInit(result.branch) };
+    const config2 = loadConfig(root);
+    const result = await cmdInit(root, config2, epic, title);
+    return { result, next: afterInit(result.branch, config2.hooks.init) };
   })
 );
 server.registerTool(
@@ -44835,25 +44641,13 @@ server.registerTool(
   ({ story: id }) => answer(async () => {
     const config2 = loadConfig(root);
     const result = await cmdStart(root, config2, id, {});
-    return { result, next: afterStart(config2.hooks.start) };
-  })
-);
-server.registerTool(
-  "epic_close_check",
-  {
-    description: "Call after updating the story row, ledger entry and HANDOFF.md, to list what still stops the story from closing.",
-    inputSchema: story
-  },
-  ({ story: id }) => answer(async () => {
-    const config2 = loadConfig(root);
-    const problems = await closeProblems(root, config2, id);
-    return { result: { problems }, next: [afterCloseCheck(problems), ...config2.hooks.close].join("\n") };
+    return { result, next: afterStart(result.story, config2.hooks.start, config2.hooks.close) };
   })
 );
 server.registerTool(
   "epic_close",
   {
-    description: "Call once epic_close_check reports ready: it commits the epic folder, pushes, and opens the story PR.",
+    description: "Call when the story is done and the close steps from epic_start are met: it commits the epic folder, pushes, and opens the story PR.",
     inputSchema: story
   },
   ({ story: id }) => answer(async () => {
@@ -44871,18 +44665,6 @@ server.registerTool(
     const result = await cmdNext(root, loadConfig(root), id, {});
     const first = result.next === null ? void 0 : pendingLine(result.next.story, result.closed.story);
     return { first, result, next: afterNext(result, "pending") };
-  })
-);
-server.registerTool(
-  "epic_check",
-  {
-    description: "Call to lint an epic package (or every package when no epic id is given) after editing it.",
-    inputSchema: { epic: external_exports.string().optional() }
-  },
-  ({ epic }) => answer(async () => {
-    const result = await cmdCheck(root, loadConfig(root), epic);
-    const clean = result.every((r) => r.problems.length === 0);
-    return { result, next: clean ? "ok" : "Fix the listed problems, then call epic_check again." };
   })
 );
 await server.connect(new StdioServerTransport());

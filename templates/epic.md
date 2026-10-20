@@ -1,18 +1,18 @@
 # ENN — Epic title
 
 <!--
-  Epic package template (docs/templates/epic.md). Create with
-  `python3 scripts/epic.py init ENN "Epic title"` — do not copy by hand.
+  Epic package template. epic_init writes it; a repo can ship its own with
+  the `templates:` key in .epic.yml.
 
-  Three sections are machine-read by scripts/epic.py; keep their shape:
-    ## Status      the block between the epic-status markers (rewritten whole)
-    ## Story list  the table; row order IS the build order; the first cell
-                   starts with the story id (`TH-652 Title`)
-    ## Ledger      one `### TH-652 — YYYY-MM-DD` entry per finished story,
-                   appended in the order stories closed
-  Everything else is planning content, mostly frozen after planning.
-  History never goes into ## Status. It goes into ## Ledger.
-  The brief for the next fresh session is HANDOFF.md next to this file.
+  paseo-epic reads three parts and checks none of them. The repo's own
+  checks, named in the .epic.yml hooks, own the rules.
+    ## Status      the lines between the epic-status markers, shown as they are
+    ## Story list  the table; row order is the build order; the first cell
+                   starts with the story id (`S-1 Title`)
+    ## Ledger      one `### S-1 — YYYY-MM-DD` entry per finished story; the
+                   entry is the body of the story PR
+  Comment blocks like this one are skipped.
+  The brief for the next story is HANDOFF.md next to this file.
 -->
 
 ## Status
@@ -28,16 +28,11 @@ Next: none
 
 One paragraph. What is true for the user when this epic is closed.
 
-## Source of truth
-
-- `design/…` — the design agreed on YYYY-MM-DD.
-- Product docs this epic changes.
-
 ## Design decisions
 
 | # | Decision | Where it lives |
 | --- | --- | --- |
-| 1 | | ADR / design file |
+| 1 | | |
 
 ## Scope
 
@@ -51,26 +46,21 @@ Out of scope:
 
 ## Story list
 
-Row order is the build order. `Status` is one of `planned`, `in_progress`,
-`implemented`, `dropped`. `Done` is `YYYY-MM-DD PR #N` once implemented.
+Row order is the build order. The Epic panel marks `in_progress` and
+`implemented` rows.
 
 | Story | Description | Lane | Status | Done |
 | --- | --- | --- | --- | --- |
-| TH-NNN Story title | What it builds, in one or two sentences. | normal | planned | |
+| S-1 Story title | What it builds, in one or two sentences. | normal | planned | |
 
 ## Ledger
 
-One entry per finished story, appended at `/epic close`, newest last. Fixed
-shape; the same facts feed `HANDOFF.md` §2.
+One entry per finished story, newest last.
 
 <!--
-### TH-NNN — YYYY-MM-DD
+### S-1 — YYYY-MM-DD
 
-- Branch / PR: `feat/TH-NNN-slug`, PR #N into `epic/ENN-slug`.
-- Shipped: `path/one.ts` (new …), `path/two.ts` (changed …).
-- Decisions: ADR TH-0NNN accepted with the story; …
-- Deviations: what the plan said vs what shipped, and why.
-- Effects on later stories: TH-MMM row edited (…); none.
+- What shipped, what changed in the plan, and what later stories need to know.
 -->
 
 ## Dependencies
@@ -78,19 +68,9 @@ shape; the same facts feed `HANDOFF.md` §2.
 - Upstream: …
 - Downstream: …
 
-## Validation outline
-
-| Layer | Expected proof |
-| --- | --- |
-| Unit | |
-| Integration | |
-| E2E | |
-| Platform | |
-| Release | |
-
 ## Open questions
 
-1. … (owned by TH-NNN)
+1. …
 
 ## Notes
 
