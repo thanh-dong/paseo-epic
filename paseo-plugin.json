@@ -1,7 +1,7 @@
 {
   "id": "epic",
   "requirements": {
-    "paseo": ">=0.10.2"
+    "paseo": ">=0.12.0"
   },
   "build": [
     ["npm", "ci", "--omit=dev"]
