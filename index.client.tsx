@@ -103,6 +103,7 @@ export default function contribute(client: PluginClientContext) {
       title: "Epic",
       icon: "ListOrdered",
       context: "workspace",
+      locations: ["workspace", "explorer"],
       Component: EpicPanel,
     }),
     client.addSlashCommand({
