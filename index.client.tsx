@@ -18,6 +18,7 @@ import {
   startInstructions,
   USAGE,
 } from "./client/strings";
+import { watchWorkspaces } from "./client/workspaces";
 
 // Derived from the host SDK: `@getpaseo/client` is not installed on a production-only install.
 type PaseoApi = PluginCommandCapabilities["paseo"];
@@ -106,6 +107,8 @@ async function onEpicCommand(ctx: PluginWorkspaceCommandContext & { args: string
 }
 
 export default function contribute(client: PluginClientContext) {
+  // One workspace list subscription for the header buttons and every open Epics screen.
+  const workspaces = watchWorkspaces(client.paseo.workspaces);
   const cleanups = [
     client.addWorkspacePanel({
       id: PANEL_ID,
@@ -132,13 +135,14 @@ export default function contribute(client: PluginClientContext) {
           message: (await ctx.rpc(nextRpc, { workspaceDir: ctx.workspace.directory })).message,
         })),
     }),
-    startHeaderButtons(client),
+    startHeaderButtons(client, workspaces),
     client.addScreen({
       id: OVERVIEW_ID,
       title: overviewLabels.title,
-      Component: makeEpicOverview((workspaceId) => client.openPanel(PANEL_ID, { workspaceId })),
+      Component: makeEpicOverview((workspaceId) => client.openPanel(PANEL_ID, { workspaceId }), workspaces),
     }),
     client.addSidebarFooterItem({ id: OVERVIEW_ID, title: overviewLabels.title, Component: EpicsSidebarItem }),
+    () => workspaces.stop(),
   ];
   return () => {
     for (const cleanup of cleanups) cleanup();

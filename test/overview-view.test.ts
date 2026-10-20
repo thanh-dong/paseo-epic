@@ -1,5 +1,15 @@
 import { expect, test } from "vitest";
-import { cardLines, groupProjects, type OverviewEpic, sections, visibleEpics } from "../client/overview";
+import {
+  cardLines,
+  groupProjects,
+  groupsToRead,
+  isReading,
+  type OverviewEpic,
+  type ProjectState,
+  sections,
+  visibleEpics,
+  workspaceKey,
+} from "../client/overview";
 import type { WorkspaceInfo } from "../client/workspaces";
 
 function ws(id: string, projectId: string, git = true): WorkspaceInfo {
@@ -72,4 +82,32 @@ test("sections: a project with no epic branches is not shown; an error shows in 
     hidden: 0,
     error: null,
   });
+});
+
+test("groupsToRead: a new project, and one whose set of workspaces changed; not one whose workspaces only moved", () => {
+  const [p1, p2] = groupProjects([ws("a", "p1"), ws("b", "p1"), ws("c", "p2")]);
+  const read = new Map([
+    ["p1", workspaceKey({ ...p1, workspaces: [...p1.workspaces].reverse() })],
+    ["p2", workspaceKey(p2)],
+  ]);
+  expect(groupsToRead([p1, p2], read)).toEqual([]);
+  const [q1, q2] = groupProjects([ws("a", "p1"), ws("c", "p2"), ws("d", "p2"), ws("e", "p3")]);
+  expect(groupsToRead([q1, q2, ...groupProjects([ws("e", "p3")])], read).map((g) => g.projectId)).toEqual([
+    "p1",
+    "p2",
+    "p3",
+  ]);
+});
+
+test("isReading: before the first workspace list, and while a project has no answer yet", () => {
+  const groups = groupProjects([ws("a", "p1"), ws("b", "p2")]);
+  expect(isReading(null, new Map())).toBe(true);
+  expect(isReading([], new Map())).toBe(false);
+  expect(isReading(groups, new Map([["p1", { phase: "ready" as const, epics: [] }]]))).toBe(true);
+  const settled = new Map<string, ProjectState>([
+    ["p1", { phase: "ready" as const, epics: [] }],
+    ["p2", { phase: "error" as const, error: "x" }],
+  ]);
+  expect(isReading(groups, settled)).toBe(false);
+  expect(isReading(groups, new Map([...settled, ["p2", { phase: "loading" as const }]]))).toBe(true);
 });

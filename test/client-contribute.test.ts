@@ -21,7 +21,7 @@ function fakeClient() {
     addScreen: record("screen"),
     addSidebarFooterItem: record("sidebar-footer"),
     // The header buttons wait for a workspace list that never comes.
-    paseo: { workspaces: { list: () => new Promise(() => {}) } },
+    paseo: { workspaces: { list: vi.fn(() => new Promise(() => {})) } },
   };
   return { client, added };
 }
@@ -43,4 +43,13 @@ test("a sidebar footer item Epics opens the Epics screen", async () => {
   const item = added.find((r) => r.kind === "sidebar-footer")?.contribution;
   expect([screen?.id, screen?.title]).toEqual(["epic-overview", "Epics"]);
   expect([item?.id, item?.title]).toEqual(["epic-overview", "Epics"]);
+});
+
+test("the header buttons and the Epics screen share one workspace list subscription", async () => {
+  const { default: contribute } = await import("../index.client");
+  const { client } = fakeClient();
+  const cleanup = contribute(client as never);
+  expect(client.paseo.workspaces.list).toHaveBeenCalledTimes(1);
+  expect(client.paseo.workspaces.list).toHaveBeenCalledWith({ subscribe: {} });
+  cleanup();
 });

@@ -84,3 +84,28 @@ export function sections(
   }
   return out;
 }
+
+/** The project's set of workspace ids, order-free; a new key means the project is read again. */
+export function workspaceKey(group: ProjectGroup): string {
+  return group.workspaces
+    .map((w) => w.id)
+    .sort()
+    .join("\n");
+}
+
+/** The projects to read: those not read yet, and those whose set of workspaces changed since. */
+export function groupsToRead(
+  groups: readonly ProjectGroup[],
+  readKeys: ReadonlyMap<ProjectId, string>,
+): ProjectGroup[] {
+  return groups.filter((g) => readKeys.get(g.projectId) !== workspaceKey(g));
+}
+
+/** True before the first workspace list, and while any project has no answer yet. */
+export function isReading(groups: readonly ProjectGroup[] | null, states: ReadonlyMap<ProjectId, ProjectState>): boolean {
+  if (groups === null) return true;
+  return groups.some((g) => {
+    const phase = states.get(g.projectId)?.phase;
+    return phase === undefined || phase === "loading";
+  });
+}
