@@ -2,7 +2,7 @@
 
 Run an epic story by story in [Paseo](https://paseo.sh): one fresh agent per story, one merge and one word from you between stories.
 
-**Status:** v0.1 · needs Paseo >= 0.10.2 · MIT license · built for a single user on one daemon.
+**Status:** v0.1 · needs Paseo >= 0.12.0 · MIT license · built for a single user on one daemon.
 
 ## What it is
 
@@ -67,7 +67,7 @@ Three kinds of caller use the plugin:
 
 | Caller | What it uses |
 | --- | --- |
-| You (human) | The **Epic** workspace panel (it also opens the story's workspace and agent), the `/epic <verb> [id]` slash command, and the Command Center item **Epic: start next story** |
+| You (human) | The **Epic** header button in each workspace of an epic repo, the **Epic** panel (in the workspace or the Explorer; it also opens the story's workspace and agent), the **Epics** screen from the sidebar, the `/epic <verb> [id]` slash command, and the Command Center item **Epic: start next story** |
 | The agent | The five `epic_*` tools of the `epic` MCP server |
 | The plugin itself | An `agent.create` hook that adds the `epic` MCP server to new agents in a repo with `.epic.yml` or an epic package, and an `agent.turn_ended` hook that spawns the next story's agent after `epic_next` |
 
@@ -79,7 +79,7 @@ Three kinds of caller use the plugin:
 
 ## Install
 
-You need Paseo 0.10.2 or newer.
+You need Paseo 0.12.0 or newer.
 
 From GitHub. Paseo runs the build step from `paseo-plugin.json`
 (`npm ci --omit=dev`):
@@ -105,11 +105,11 @@ paseo plugin ls          # epic must show `running`
 paseo plugin logs epic   # no errors
 ```
 
-A `paseo` CLI older than 0.10 has no `paseo plugin` command. Run the 0.10.2
+A `paseo` CLI older than 0.10 has no `paseo plugin` command. Run the 0.12.0
 CLI through `npx` instead of a global upgrade:
 
 ```bash
-npx -y @getpaseo/cli@0.10.2 plugin install github:thanh-dong/paseo-epic
+npx -y @getpaseo/cli@0.12.0 plugin install github:thanh-dong/paseo-epic
 ```
 
 ### Enable plugins
@@ -158,6 +158,19 @@ Ids are yours. The plugin takes any story id shape (`TH-1`, `TH-E10-1`,
 `-`, so it cannot hold a `-`.
 
 ## Usage reference
+
+### Where to find it
+
+| Place | What you get |
+| --- | --- |
+| Workspace header | In every workspace of a repo with `.epic.yml` or an epic package, a button with where the epic stands: `E10 · next TH-E10-3`, `E10 · closed` when the handoff says `next=none`, or `Epic` before the first package. Its menu: **Open Epic panel**, **Open in Explorer**, **Epic overview**. No item starts work. |
+| Explorer | The Epic panel can also open in the Explorer side panel. |
+| Sidebar footer | **Epics** opens the Epics screen: the epics of all projects on the host. |
+| Composer | `/epic status` opens the Epic panel. |
+
+The header label is read when the button appears and again each time Paseo
+updates that workspace. The `next` in the label comes from the handoff on
+`origin/<epic branch>` as last fetched, else from the checkout.
 
 ### The `/epic` slash command
 
@@ -253,6 +266,27 @@ Review flow: open the Epic panel in a workspace whose checkout holds the epic
 package (see above), open the story's row, press **Open workspace**, and
 review the change in Paseo's Diff tab.
 
+### The Epics screen
+
+The screen lists the epics of every git project on the host, one section per
+project and one card per epic, newest epic first. It reads each epic from its
+epic branch on origin (`origin/<epicBranchPrefix>*`, as last fetched), so
+every worktree sees the same state. A card shows:
+
+- the epic id and title, the `State:` line, and the next story;
+- `stories: <open> of <total> open` (rows whose status is `planned` or
+  `in_progress`);
+- the open PR into the epic branch, through `gh` (`PR: none` without one or
+  without `gh`);
+- **Open workspace** and **Open panel**, for a workspace of the project on
+  the epic branch, on one of its story branches, or at the project root.
+
+**Refresh** runs `git fetch origin --prune` in every project, then reads
+them again. Opening the screen does not fetch. Epics whose handoff says
+`next=none` are hidden until you turn on **Show closed**. A project with no
+epic branch is not shown. When one project fails, its error shows in its own
+section; the other projects still show.
+
 ### `.epic.yml`
 
 An optional file at the repo root. The schema is strict: an unknown key, a
@@ -316,7 +350,8 @@ The shipped templates are neutral. Ship your own with `templates:` in
 - **Cancelled turns.** If the closing agent's turn does not end normally,
   nothing is spawned. Press **Start next story** instead.
 - **Manual checks.** Some live checks are still pending (panel layouts, the
-  Electron node fallback, Codex agents, the live `next` spawn). See
+  header button, the Explorer panel, the Epics screen, the Electron node
+  fallback, Codex agents, the live `next` spawn). See
   [docs/VERIFICATION.md](docs/VERIFICATION.md).
 
 ## Development

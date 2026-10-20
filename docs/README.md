@@ -25,6 +25,12 @@ The plugin gives you:
   the open PR, and a **Start next story** button. A story row opens to show
   the story's workspace and agent with **Open workspace** and **Open agent**
   buttons, its PR link, and the files it changed.
+- The same panel in the Explorer side panel.
+- A header button in every workspace of an epic repo. Its label says where
+  the epic stands (`E10 · next TH-E10-3`); its menu opens the Epic panel, the
+  panel in the Explorer, or the Epics screen. It starts no work.
+- An **Epics** item in the sidebar footer. It opens the Epics screen: the
+  epics of all projects on the host, read from their epic branches on origin.
 - A `/epic <verb> [id]` slash command for you. Verbs: `init`, `start`,
   `close`, `next`, `status`.
 - A Command Center item: **Epic: start next story**.
@@ -44,10 +50,11 @@ exists.
   you (Paseo app)                 plugin (daemon)            agent
   +-------------------+          +-----------------+        +-----------+
   | Epic panel        |  RPC     | core:           |  MCP   | epic_*    |
-  | /epic             | -------> | EPIC.md,        | <----- | tools     |
-  | Command Center    |          | HANDOFF.md,     |        |           |
-  +-------------------+          | git, gh         |        +-----------+
-                                 +-----------------+
+  | header button     | -------> | EPIC.md,        | <----- | tools     |
+  | Epics screen      |          | HANDOFF.md,     |        |           |
+  | /epic, Command    |          | git, gh         |        +-----------+
+  | Center            |          +-----------------+
+  +-------------------+
 ```
 
 ## The plugin runs the flow; your repo owns the rules
@@ -79,8 +86,9 @@ and `hooks.close` under "When the story is done:" after `epic_start`. See
 
 ## Install
 
-You need Paseo 0.10.2 or newer (`paseo-plugin.json` says
-`"paseo": ">=0.10.2"`).
+You need Paseo 0.12.0 or newer (`paseo-plugin.json` says
+`"paseo": ">=0.12.0"`). The header button, the Explorer location, the
+sidebar item and the screen need the 0.12.0 plugin API.
 
 From GitHub:
 
@@ -113,10 +121,10 @@ paseo plugin logs epic   # no errors
 ```
 
 A `paseo` CLI older than 0.10 has no `paseo plugin` command. You do not need
-a global upgrade. Run the 0.10.2 CLI through `npx`:
+a global upgrade. Run the 0.12.0 CLI through `npx`:
 
 ```bash
-npx -y @getpaseo/cli@0.10.2 plugin install github:<owner>/paseo-epic
+npx -y @getpaseo/cli@0.12.0 plugin install github:<owner>/paseo-epic
 ```
 
 For a GitHub install, Paseo runs the build step from `paseo-plugin.json`:
@@ -169,6 +177,25 @@ Install only plugins whose source you have read.
 
 The full text the tools give the agent is in [routine.md](routine.md).
 
+## Where to find it
+
+- **Header button.** Every workspace of a repo with `.epic.yml` or an epic
+  package has one. Label: `E10 · next TH-E10-3`; `E10 · closed` when the
+  handoff says `next=none`; `Epic` when the repo has `.epic.yml` but no
+  package yet. The `next` comes from `HANDOFF.md` on `origin/<epic branch>`
+  when that ref exists (as last fetched), else from the checkout. The menu
+  has **Open Epic panel**, **Open in Explorer** and **Epic overview**.
+- **Explorer.** The Epic panel can open in the Explorer side panel as well
+  as in a workspace tab.
+- **Sidebar.** **Epics** in the sidebar footer opens the Epics screen.
+- **Composer.** `/epic status` opens the Epic panel.
+
+The client keeps a live workspace list (`workspaces.list` with a
+subscription) and asks the daemon once per workspace directory whether it is
+an epic repo (RPC `epic.header`, which also returns the label). The label is
+read again when Paseo updates that workspace. A workspace that leaves the
+list loses its button.
+
 ## The Epic panel
 
 The panel reads two status words from the story table: it opens an
@@ -215,6 +242,29 @@ no timer.
 Review flow: open the Epic panel in a workspace whose checkout holds the epic
 package (see above), open the story's row, press **Open workspace**, and
 review the change in Paseo's Diff tab.
+
+## The Epics screen
+
+The screen lists the epics of every git project on the host. For each
+project it calls the RPC `epic.overview` once, with the project root and the
+project's workspaces. The RPC lists the `origin/<epicBranchPrefix>*` refs and
+reads each package as committed there: the title, the `State:` line, `next=`
+and `after=` from the handoff header, and the story rows. A branch with no
+`EPIC.md` is no epic and is left out; a branch with no `HANDOFF.md` shows
+with no next story.
+
+One section per project, one card per epic, newest epic first. A card shows
+`<epic> <title>`, `<state> · next <story>`, `stories: <open> of <total>
+open` (open means `planned` or `in_progress`), and the open PR into the epic
+branch through `gh`. **Open workspace** and **Open panel** appear when the
+project has a workspace on the epic branch or on one of its story branches,
+else at the project root.
+
+- **Refresh** runs `git fetch origin --prune` in each project, then reads it
+  again. Opening the screen does not fetch.
+- **Show closed** also shows the epics whose handoff says `next=none`.
+- A project with no epic branch is not shown. A project that fails shows its
+  error in its own section.
 
 ## The `next` flow
 
@@ -322,5 +372,8 @@ do next.
   comments were not read.
 - The panel reads the package when it opens, after a button press, and after
   a slash command result. An open story row reads `epic.story-changes`
-  when you open it and on **Refresh**. Nothing refreshes on a timer.
+  when you open it and on **Refresh**. The header label is read when the
+  button appears and when Paseo updates the workspace. The Epics screen reads
+  each project once and again on **Refresh**. Nothing refreshes on a timer.
+- The Epics screen lists the host the app has selected, not every host.
 - The npm package is not published yet.

@@ -74,3 +74,55 @@ task; each task ends green on `npm run typecheck` and `npm test`.
   start/cleanup pair so a reload leaves no stale buttons.
 - Risk: one `gh` call per epic on the overview. It runs only when the screen
   loads or Refresh is pressed; a missing `gh` gives `openPr: null`.
+
+## Deviations (implementation, 2026-10-20)
+
+Each one keeps the owner's three decisions: all projects, the epic branches
+on origin as the data source, and a header menu with no item that starts
+work.
+
+1. **`headerRpc` is the per-directory gate, not `isEpicRpc`.** `isEpicRpc`
+   answers true only for an epic package; a repo with `.epic.yml` alone is
+   false, so it could never show the `Epic` label. Widening it would change
+   the panel (it would call status and show "no epic package; run init
+   first" as an error instead of its no-epic text). So `headerRpc` returns
+   `null` for a repo with neither `.epic.yml` nor a package, and
+   `{ epic: null, next: "" }` for `.epic.yml` alone. One RPC per directory
+   instead of two. `isEpicRpc` is unchanged.
+2. **Label without a handoff header.** When the handoff has no header (or
+   there is no HANDOFF.md), `next` is `""` and the label is the epic id
+   alone (`E10`). The spec did not cover this case.
+3. **`planButtons` takes a fourth argument, `changed`.** Only the workspaces
+   a list change is about are re-labelled (every workspace on a snapshot,
+   one on an update), so an update of one workspace does not re-read every
+   label.
+4. **The screen's Open panel.** `PluginScreenProps` has no `openPanel`, so
+   `makeEpicOverview(openPanel)` closes over `client.openPanel`.
+5. **The PR link on the screen** uses `navigation.openBrowser` when the card
+   has a workspace, else the URL is selectable text, as in the panel.
+   `openExternalUrl` is declared in the 0.12.0 types but is not in the
+   package's `client/index.js`, so it is not used.
+6. **An origin epic branch with no `EPIC.md`** is no epic and is left out of
+   the overview, not an error for the project. The spec covered only a
+   missing `HANDOFF.md` (next shows empty).
+7. **Small shape choices.** `overviewRpc` returns `project` as the project
+   root it was called with; its `fetch` input is optional. The menu items
+   carry no icons (a bad Lucide name throws; the titles are enough). Under a
+   project whose closed epics are hidden, a muted line says how many are
+   hidden, so a project with only closed epics does not look empty.
+8. **Mobile audit.** Client generics use named id types (`WorkspaceId`,
+   `ProjectId`, `Dir`) so the audit's HTML-tag pattern does not match
+   `Set<string>`. The one remaining hit is the old `noEpic` text in
+   `client/strings.ts`.
+9. **"No fixed place" limitation.** Neither README nor docs/README.md had
+   that text, so nothing was removed. The README "Manual checks" bullet now
+   names the new live checks.
+10. **Lockfile.** `npm install` of 0.12.0 also dropped the nested
+    `vitest/node_modules/esbuild` (0.28.2) entries; the root esbuild 0.25.12
+    builds the MCP bundle and the bundle did not change.
+11. **Task 8.** No draft PR: this run does not push.
+
+For the live check (task 9): the workspace subscription is
+`workspaces.list({ subscribe: {} })` with no page option, as in the spec. If
+the daemon pages the snapshot, workspaces past the first page would get no
+button; row 26 shows it.

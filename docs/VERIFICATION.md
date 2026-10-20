@@ -17,9 +17,9 @@ runs:
 
 ```bash
 (cd /Volumes/ExDrive/_sources/paseo-epic && npm ci --omit=dev)
-npx -y @getpaseo/cli@0.10.2 plugin install /Volumes/ExDrive/_sources/paseo-epic
-npx -y @getpaseo/cli@0.10.2 plugin ls
-npx -y @getpaseo/cli@0.10.2 plugin logs epic
+npx -y @getpaseo/cli@0.12.0 plugin install /Volumes/ExDrive/_sources/paseo-epic
+npx -y @getpaseo/cli@0.12.0 plugin ls
+npx -y @getpaseo/cli@0.12.0 plugin logs epic
 ```
 
 Expected: `epic` is `running`, and the logs show no error.
@@ -56,6 +56,15 @@ through the table.
 | 23 | Compare the row's file list with `git status --porcelain --untracked-files=all` and `git diff --name-status origin/<epic>...HEAD` run in the worktree | the same files, the same status letters after the merge rules (new or renamed files keep A or R; a new file deleted again disappears), and the `uncommitted` tag on exactly the uncommitted and untracked ones | pending | |
 | 24 | Press **Open agent** in that row | the app opens the story's agent | pending | |
 | 25 | An open story row in the compact layout and in a second theme | the row and its file lines stay readable; long paths keep their end visible; the status dot is visible in both themes | pending | |
+| 26 | Header of a workspace in an epic repo, and of a workspace in a repo with no `.epic.yml` and no package | the epic workspace has the button with a label like `E10 · next TH-E10-3`; the other has none | pending | |
+| 27 | Header button menu: **Open Epic panel** | the Epic panel opens as a workspace tab | pending | |
+| 28 | Header button menu: **Open in Explorer** | the Epic panel opens in the Explorer side panel and lays itself out there | pending | |
+| 29 | Header button menu: **Epic overview** | the Epics screen opens; nothing starts | pending | |
+| 30 | Archive or close a workspace of the epic repo; reload the plugin | the archived workspace's button goes away; after the reload each epic workspace has exactly one button | pending | |
+| 31 | **Epics** in the sidebar footer | the row shows, is marked active while the screen is open, and opens the Epics screen | pending | |
+| 32 | The Epics screen | one section per project with epic branches; cards newest first with state, next, story counts and the open PR; **Open workspace** and **Open panel** work | pending | |
+| 33 | **Refresh** after pushing a new epic branch from elsewhere, and **Show closed** | Refresh shows the new epic; Show closed adds the `next=none` epics | pending | |
+| 34 | The header button, the Explorer panel and the Epics screen in a compact (narrow) window and in a second theme | text is readable; the screen toolbar buttons stack | pending | |
 
 ## After the checks pass: move inflow to the plugin
 
