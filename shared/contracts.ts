@@ -26,6 +26,7 @@ const statusResultSchema = z.object({
   behind: z.string().nullable(),
   rows: z.array(rowSchema),
   openPr: z.object({ number: z.number(), url: z.string(), headRefName: z.string() }).nullable(),
+  closeHooks: z.array(z.string()),
 });
 
 const startResultSchema = z.object({

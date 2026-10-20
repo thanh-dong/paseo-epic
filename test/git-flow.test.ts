@@ -1,4 +1,4 @@
-import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { cmdClose, cmdInit, cmdNext, cmdStart, cmdStatus, pickMergedPr, prBody } from "../server/core/commands";
@@ -151,6 +151,23 @@ test("closeCommitsTheEpicFolderAndChecksNoContent", async () => {
   expect(readFileSync(join(d, "EPIC.md"), "utf8")).toBe(onDisk);
 });
 
+test("closeRefusesAHandoffThatDoesNotSayAfterStoryOrStillSaysNextStory", async () => {
+  const d = await fx.planAndPush();
+  await cmdStart(fx.root, cfg, "TH-901", { noGh: true });
+  const h = join(d, "HANDOFF.md");
+  const planned = readFileSync(h, "utf8");
+  // Not rewritten yet: after=none next=TH-901.
+  await expect(cmdClose(fx.root, cfg, "TH-901", { noPr: true, noGh: true })).rejects.toThrow(
+    "HANDOFF.md says after=none; set after=TH-901 before epic_close",
+  );
+  writeFileSync(h, planned.replace("after=none next=TH-901", "after=TH-901 next=TH-901"));
+  await expect(cmdClose(fx.root, cfg, "TH-901", { noPr: true, noGh: true })).rejects.toThrow(
+    "HANDOFF.md still says next=TH-901; point next= at the following story or none",
+  );
+  // Nothing was committed by the refusals.
+  expect((await git(fx.root, "log", "-1", "--pretty=%s")).trim()).toBe("plan E99");
+});
+
 test("closeRefusesALocalHandoffWithoutItsHeader", async () => {
   const d = await fx.planAndPush();
   await cmdStart(fx.root, cfg, "TH-901", { noGh: true });
@@ -258,9 +275,19 @@ test("nextRefusesAStoryClosedEarlier", async () => {
   await git(fx.root, "commit", "-q", "-am", "close TH-902");
   await git(fx.root, "push", "-q", "origin", "feat/TH-901-first-thing:epic/E99-test-epic");
   await expect(cmdNext(fx.root, cfg, "TH-901", { noGh: true })).rejects.toThrow(
-    "TH-901 is not merged into origin/epic/E99-test-epic yet (the handoff there says after=TH-902)",
+    "TH-901 is not the last closed story on origin/epic/E99-test-epic; the handoff there says after=TH-902, so run next TH-902",
   );
   expect((await cmdNext(fx.root, cfg, "TH-902", { noGh: true })).next?.story).toBe("TH-903");
+});
+
+test("nextForALaterStoryThanTheTipsAfterSaysNotMergedYet", async () => {
+  const d = await fx.planAndPush();
+  await fx.close901(d);
+  await git(fx.root, "push", "-q", "origin", "feat/TH-901-first-thing:epic/E99-test-epic");
+  // The tip says after=TH-901; TH-902 comes later in the table, so it is simply not merged yet.
+  await expect(cmdNext(fx.root, cfg, "TH-902", { noGh: true })).rejects.toThrow(
+    "TH-902 is not merged into origin/epic/E99-test-epic yet (the handoff there says after=TH-901)",
+  );
 });
 
 test("nextRefusesAHandoffWithoutItsHeaderOnTheTip", async () => {
@@ -288,8 +315,41 @@ test("nextReportsAClosedEpic", async () => {
 
 test("next picks the merged PR by head prefix among others", () => {
   const prs = [{ headRefName: "feat/TH-900-old", number: 1 }, { headRefName: "feat/TH-901-first-thing", number: 7 }];
-  expect(pickMergedPr(prs, "TH-901")?.number).toBe(7);
-  expect(pickMergedPr(prs, "TH-902")).toBeNull();
+  const ids = ["TH-900", "TH-901", "TH-902"];
+  expect(pickMergedPr(prs, "TH-901", "feat/", ids)?.number).toBe(7);
+  expect(pickMergedPr(prs, "TH-902", "feat/", ids)).toBeNull();
+  // S-1's PR is not S's PR.
+  const dash = [{ headRefName: "feat/S-1-next", number: 2 }];
+  expect(pickMergedPr(dash, "S", "feat/", ["S", "S-1"])).toBeNull();
+  expect(pickMergedPr(dash, "S-1", "feat/", ["S", "S-1"])?.number).toBe(2);
+});
+
+test("stories S and S-1 do not collide in the packet slug, the close guard and status", async () => {
+  const rows = ["| S Base | One. | normal | planned | |", "| S-1 Next | Two. | normal | planned | |"].join("\n");
+  const d = await fx.planAndPush({ rows, next: "S" });
+  // A packet folder for S-1 on the tip must not give S its slug.
+  mkdirSync(join(d, "S-1-later"));
+  writeFileSync(join(d, "S-1-later", "story.md"), "x\n");
+  await git(fx.root, "add", "-A");
+  await git(fx.root, "commit", "-q", "-m", "S-1 packet");
+  await git(fx.root, "push", "-q");
+  expect((await cmdStart(fx.root, cfg, "S", { noGh: true })).storyBranch).toBe("feat/S-base");
+  // On S-1's branch, S cannot close.
+  await git(fx.root, "checkout", "-q", "-b", "feat/S-1-later");
+  await expect(cmdClose(fx.root, cfg, "S", { noPr: true, noGh: true })).rejects.toThrow("not the story branch for S");
+  // Status finds the package from S-1's branch too.
+  expect((await cmdStatus(fx.root, cfg)).epic).toBe("E99");
+});
+
+test("statusPrefersAnExactEpicBranchOverAStoryBranchMatch", async () => {
+  // A story prefix equal to the epic prefix: E1 has a row "E2", and E2's epic branch is checked out.
+  const odd = { ...cfg, branchPrefix: "epic/" };
+  const one = (await cmdInit(fx.root, odd, "E1", "One", { noGit: true })).dir;
+  const f = join(one, "EPIC.md");
+  writeFileSync(f, readFileSync(f, "utf8").replace(TEMPLATE_ROW, "| E2 Clash | x | normal | planned | |"));
+  await cmdInit(fx.root, odd, "E2", "Two", { noGit: true });
+  await git(fx.root, "checkout", "-q", "-b", "epic/E2-two");
+  expect((await cmdStatus(fx.root, odd)).epic).toBe("E2");
 });
 
 test("statusReportsRowsTheStatusBlockAsWrittenAndTheHandoffNext", async () => {
@@ -300,6 +360,9 @@ test("statusReportsRowsTheStatusBlockAsWrittenAndTheHandoffNext", async () => {
   // The template's Status block as written; the plugin renders nothing from the table.
   expect([s.state, s.stories]).toEqual(["planned", "0 of 0 implemented"]);
   expect(Object.keys(s)).not.toContain("problems");
+  expect(s.closeHooks).toEqual([]);
+  const hooks = { ...cfg.hooks, close: ["Fill the ledger.", "Run the check."] };
+  expect((await cmdStatus(fx.root, { ...cfg, hooks }, "E99")).closeHooks).toEqual(["Fill the ledger.", "Run the check."]);
   expect(s.epic).toBe("E99");
   expect(s.epicBranch).toBe("epic/E99-test-epic");
   expect(s.behind).toBe("0");

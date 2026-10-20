@@ -26,7 +26,7 @@ import {
   packetSlug,
   subdirs,
 } from "./locate";
-import { folderEpicId, ledgerEntry, rowOf, splitLines } from "./parse";
+import { folderEpicId, ledgerEntry, rowOf, splitLines, storyOfName } from "./parse";
 import { slugify, today } from "./slug";
 import { templateText } from "./templates";
 import { type EpicPackage, EpicError, type Handoff, type Row } from "./types";
@@ -60,9 +60,15 @@ function requireHeader(handoff: Handoff | null, where: string): Handoff {
   return handoff;
 }
 
+/** The story ids of the package's rows. */
+function storyIds(epic: EpicPackage): string[] {
+  return epic.rows.map((r) => r.id);
+}
+
 /** The branch slug for `story`: its packet folder on origin/<branch>, else its row title, else the id. */
-async function storySlug(root: string, dir: string, branch: string, story: string, row: Row | undefined) {
-  return (await packetSlug(root, dir, branch, story)) ?? slugify(row?.title || story);
+async function storySlug(root: string, dir: string, branch: string, story: string, epic: EpicPackage) {
+  const fromPacket = await packetSlug(root, dir, branch, story, storyIds(epic));
+  return fromPacket ?? slugify(rowOf(epic, story)?.title || story);
 }
 
 /** Create the epic package from the templates, on its own `<epicBranchPrefix><folder>` branch unless `noGit`. */
@@ -166,7 +172,7 @@ export async function cmdStart(
     await run(["git", "rev-list", "--count", `origin/${branch}..origin/${config.baseBranch}`], root, false)
   ).trim();
   const row = rowOf(epic, story);
-  const storyBranch = `${config.branchPrefix}${story}-${await storySlug(root, d, branch, story, row)}`;
+  const storyBranch = `${config.branchPrefix}${story}-${await storySlug(root, d, branch, story, epic)}`;
 
   let action: StartResult["action"];
   if (opts.dryRun) {
@@ -224,6 +230,8 @@ export interface StatusResult {
   behind: string | null;
   rows: Row[];
   openPr: { number: number; url: string; headRefName: string } | null;
+  /** The `.epic.yml` close hooks, so the client's close prompt can quote them. */
+  closeHooks: string[];
 }
 
 /** Quote an argument for a POSIX shell when it is not plainly safe. */
@@ -288,18 +296,27 @@ export async function cmdClose(
   story: string,
   opts: { noPr?: boolean; noGh?: boolean } = {},
 ): Promise<CloseResult> {
+  const d = findEpicDir(root, config, story);
+  const { epic, handoff } = loadLocal(d);
   const branch = await currentBranch(root);
-  if (!branch.startsWith(`${config.branchPrefix}${story}-`)) {
+  // The longest row id wins, so on `feat/S-1-x` the story is S-1, never S.
+  if (storyOfName([...storyIds(epic), story], config.branchPrefix, branch) !== story) {
     throw new EpicError(
       `current branch \`${branch}\` is not the story branch for ${story}; ` +
         `check out \`${config.branchPrefix}${story}-…\` and run close again`,
     );
   }
-  const d = findEpicDir(root, config, story);
-  const { epic, handoff } = loadLocal(d);
   const target = epicBranch(config, d);
   const rel = gitRel(root, d);
-  const nextStory = requireHeader(handoff, `in ${rel}`).next;
+  const header = requireHeader(handoff, `in ${rel}`);
+  // The plugin reads these two fields itself (next reads after=, start reads next=), so they are flow state.
+  if (header.after !== story) {
+    throw new EpicError(`HANDOFF.md says after=${header.after}; set after=${story} before epic_close`);
+  }
+  if (header.next === story) {
+    throw new EpicError(`HANDOFF.md still says next=${story}; point next= at the following story or none`);
+  }
+  const nextStory = header.next;
 
   const others = splitLines(await gitDirty(root)).filter((ln) => !ln.includes(rel));
   if (others.length > 0) {
@@ -360,9 +377,17 @@ export async function cmdClose(
   return result;
 }
 
-/** The PR in `prs` whose head is `<prefix><story>-*`, matched on the head name only. */
-export function pickMergedPr<T>(prs: Array<{ headRefName: string } & T>, story: string, prefix = "feat/"): T | null {
-  return prs.find((pr) => pr.headRefName.startsWith(`${prefix}${story}-`)) ?? null;
+/**
+ * The PR in `prs` whose head is `<prefix><story>-*`, matched on the head name
+ * only. `ids` are the package's story ids: a head `feat/S-1-x` is S-1's PR, not S's.
+ */
+export function pickMergedPr<T>(
+  prs: Array<{ headRefName: string } & T>,
+  story: string,
+  prefix: string,
+  ids: readonly string[],
+): T | null {
+  return prs.find((pr) => storyOfName([...ids, story], prefix, pr.headRefName) === story) ?? null;
 }
 
 /**
@@ -387,6 +412,15 @@ export async function cmdNext(
   const { epic, handoff: tipHandoff } = await loadFromRef(root, d, `origin/${branch}`);
   const handoff = requireHeader(tipHandoff, `on origin/${branch}`);
   if (handoff.after !== story) {
+    // A later row closed since: point at it instead of saying "not merged".
+    const order = storyIds(epic);
+    const later = order.includes(story) && order.indexOf(handoff.after) > order.indexOf(story);
+    if (later) {
+      throw new EpicError(
+        `${story} is not the last closed story on origin/${branch}; ` +
+          `the handoff there says after=${handoff.after}, so run next ${handoff.after}`,
+      );
+    }
     throw new EpicError(
       `${story} is not merged into origin/${branch} yet (the handoff there says after=${handoff.after}); ` +
         "merge the story PR first, then run next again",
@@ -396,7 +430,7 @@ export async function cmdNext(
   let pr: MergedPr | null = null;
   let comments: PrComment[] = [];
   if (!opts.noGh && (await ghAvailable())) {
-    pr = pickMergedPr(await ghMergedPrs(root, branch), story, config.branchPrefix);
+    pr = pickMergedPr(await ghMergedPrs(root, branch), story, config.branchPrefix, storyIds(epic));
     if (pr === null) {
       throw new EpicError(
         `no merged PR into ${branch} has a \`${config.branchPrefix}${story}-*\` head; merge the story PR first`,
@@ -413,7 +447,7 @@ export async function cmdNext(
       story: nxt,
       title: row?.title ?? "",
       lane: row?.lane ?? "",
-      branch: `${config.branchPrefix}${nxt}-${await storySlug(root, d, branch, nxt, row)}`,
+      branch: `${config.branchPrefix}${nxt}-${await storySlug(root, d, branch, nxt, epic)}`,
       baseRef: `origin/${branch}`,
     };
   }
@@ -422,9 +456,10 @@ export async function cmdNext(
 
 /**
  * The package for `status` without a ref, never ambiguous: the one whose epic
- * branch is checked out or that has a row for the checked-out story branch;
- * else the newest package whose handoff does not say `next=none`; else the
- * newest package. Newest is the highest epic id in natural order (E9 < E10).
+ * branch is checked out; else the one with the row for the checked-out story
+ * branch (the longest id across all packages); else the newest package whose
+ * handoff does not say `next=none`; else the newest package. Newest is the
+ * highest epic id in natural order (E9 < E10).
  */
 export async function statusDir(root: string, config: EpicConfig): Promise<string> {
   const base = epicsDir(root, config);
@@ -433,11 +468,11 @@ export async function statusDir(root: string, config: EpicConfig): Promise<strin
     .map((d) => ({ d, ...loadLocal(d) }));
   if (packages.length === 0) throw new EpicError(`no epic package under ${base}; run init first`);
   const branch = (await runRaw(["git", "rev-parse", "--abbrev-ref", "HEAD"], root)).stdout.trim();
-  const hit = packages.find(
-    ({ d, epic }) =>
-      epicBranch(config, d) === branch || epic.rows.some((r) => branch.startsWith(`${config.branchPrefix}${r.id}-`)),
-  );
-  if (hit) return hit.d;
+  const onEpic = packages.find(({ d }) => epicBranch(config, d) === branch);
+  if (onEpic) return onEpic.d;
+  const story = storyOfName(packages.flatMap(({ epic }) => storyIds(epic)), config.branchPrefix, branch);
+  const onStory = story === undefined ? undefined : packages.find(({ epic }) => rowOf(epic, story) !== undefined);
+  if (onStory) return onStory.d;
   const open = packages.filter(({ handoff }) => handoff?.next !== "none");
   const pool = open.length > 0 ? open : packages;
   const newer = (a: string, b: string) => folderEpicId(b).localeCompare(folderEpicId(a), undefined, { numeric: true }) > 0;
@@ -475,5 +510,6 @@ export async function cmdStatus(root: string, config: EpicConfig, ref?: string):
     behind: count.code === 0 ? count.stdout.trim() : null,
     rows: epic.rows,
     openPr,
+    closeHooks: config.hooks.close,
   };
 }

@@ -70,10 +70,12 @@ async function onEpicCommand(ctx: PluginWorkspaceCommandContext & { args: string
     case "start":
       if (!id) throw new Error(USAGE);
       return sendToAgent(ctx, verb, startInstructions(id));
-    case "close":
-      // `.epic.yml` close hooks live on the server; the client has none to add.
+    case "close": {
       if (!id) throw new Error(USAGE);
-      return sendToAgent(ctx, verb, closeInstructions(id, []));
+      // The client cannot read `.epic.yml`; the status RPC carries its close hooks.
+      const { closeHooks } = await ctx.rpc(statusRpc, { workspaceDir, ref: id });
+      return sendToAgent(ctx, verb, closeInstructions(id, closeHooks));
+    }
     case "init": {
       // `init E1 "Title"`: the title is the rest of the line, quotes optional.
       const title = /^init\s+\S+\s+(.+)$/s.exec(args)?.[1]?.trim().replace(/^(["'])(.*)\1$/s, "$2");

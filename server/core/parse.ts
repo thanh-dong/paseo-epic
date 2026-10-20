@@ -17,18 +17,29 @@ export function folderEpicId(dir: string): string {
   return basename(dir).split("-")[0];
 }
 
+/** A `<!-- … -->` span, across lines; an unclosed `<!--` runs to the end, as markdown renders it. */
+const COMMENT_RE = /<!--[\s\S]*?(?:-->|$)/g;
+/** The characters `splitLines` breaks on. */
+const NOT_A_BREAK_RE = /[^\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029]/g;
+
 /**
- * `lines` with every `<!-- -->` block blanked to "", so line indexes stay.
- * A block starts on a line holding `<!--` and ends on a line holding `-->`.
+ * `text` with every `<!-- … -->` span removed. Several spans per line are
+ * fine. The line breaks inside a span stay, so line indexes do not move.
  */
-export function uncommented(lines: string[]): string[] {
-  let inComment = false;
-  return lines.map((line) => {
-    if (line.includes("<!--")) inComment = true;
-    if (!inComment) return line;
-    if (line.includes("-->")) inComment = false;
-    return "";
-  });
+export function stripComments(text: string): string {
+  return text.replace(COMMENT_RE, (span) => span.replace(NOT_A_BREAK_RE, ""));
+}
+
+/**
+ * The id among `ids` that `name` starts with as `<prefix><id>-`, the longest
+ * one when several fit, so a branch `feat/S-1-x` is S-1's, never S's.
+ */
+export function storyOfName(ids: readonly string[], prefix: string, name: string): string | undefined {
+  let best: string | undefined;
+  for (const id of ids) {
+    if (name.startsWith(`${prefix}${id}-`) && (best === undefined || id.length > best.length)) best = id;
+  }
+  return best;
 }
 
 export function parseEpic(path: string, text: string): EpicPackage {
@@ -53,7 +64,7 @@ export function parseEpic(path: string, text: string): EpicPackage {
       }
     }
   }
-  epic.rows = parseRows(lines);
+  epic.rows = parseRows(splitLines(stripComments(text)));
   return epic;
 }
 
@@ -71,11 +82,10 @@ export function section(lines: string[], heading: string): string[] {
   return out;
 }
 
-/** The rows of the `## Story list` table: the id is the first word of the first cell. */
-function parseRows(lines: string[]): Row[] {
+/** The rows of the `## Story list` table in comment-free `lines`: the id is the first word of the first cell. */
+function parseRows(clean: string[]): Row[] {
   const rows: Row[] = [];
   let inside = false;
-  const clean = uncommented(lines);
   clean.forEach((line, i) => {
     if (line.startsWith("## ")) {
       inside = line.trim() === "## Story list";
@@ -122,7 +132,8 @@ export function parseHandoff(text: string): Handoff {
 export function ledgerEntry(text: string, story: string): string {
   const out: string[] = [];
   let inside = false;
-  for (const line of uncommented(section(splitLines(text), "## Ledger"))) {
+  for (const raw of section(splitLines(stripComments(text)), "## Ledger")) {
+    const line = raw.trimEnd();
     if (line.startsWith("### ")) {
       inside = line === `### ${story}` || line.startsWith(`### ${story} `);
       if (inside) out.push(line);

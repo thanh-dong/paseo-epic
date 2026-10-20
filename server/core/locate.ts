@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join, relative, sep } from "node:path";
 import { type EpicConfig, hasConfigFile, loadConfig } from "./config";
 import { run, runRaw } from "./git";
-import { folderEpicId, parseEpic, parseHandoff, rowOf, splitLines } from "./parse";
+import { folderEpicId, parseEpic, parseHandoff, rowOf, splitLines, storyOfName } from "./parse";
 import { type EpicPackage, EpicError, type Handoff, STATUS_BEGIN } from "./types";
 
 export function epicsDir(root: string, config: EpicConfig): string {
@@ -67,6 +67,11 @@ export function findEpicDir(root: string, config: EpicConfig, ref: string): stri
   });
   if (byRow.length > 1) throw new EpicError(`${ref} is listed in more than one epic: ${names(byRow)}`);
   if (byRow.length === 1) return byRow[0];
+  if (/[/\\]|\.\./.test(ref)) {
+    throw new EpicError(
+      `\`${ref}\` is not an epic id or a story in a story list, and a folder name cannot hold \`/\`, \`\\\` or \`..\``,
+    );
+  }
   const d = join(base, ref);
   if (existsSync(d) && statSync(d).isDirectory()) return d;
   throw new EpicError(`\`${ref}\` is not an epic id, a story in a story list, or a folder under ${base}`);
@@ -103,13 +108,23 @@ export async function loadFromRef(
   };
 }
 
-/** The slug of the story's packet folder (`<story>-<slug>`) on origin/<branch>, if one exists. */
-export async function packetSlug(root: string, dir: string, branch: string, story: string): Promise<string | null> {
+/**
+ * The slug of the story's packet folder (`<story>-<slug>`) on origin/<branch>,
+ * if one exists. `ids` are the package's story ids: a folder `S-1-x` belongs
+ * to S-1, not to S.
+ */
+export async function packetSlug(
+  root: string,
+  dir: string,
+  branch: string,
+  story: string,
+  ids: readonly string[],
+): Promise<string | null> {
   const rel = gitRel(root, dir);
   const out = await run(["git", "ls-tree", "--name-only", `origin/${branch}`, `${rel}/`], root, false);
   for (const line of splitLines(out)) {
     const name = line.split("/").pop() ?? "";
-    if (name.startsWith(`${story}-`)) return name.slice(story.length + 1);
+    if (storyOfName([...ids, story], "", name) === story) return name.slice(story.length + 1);
   }
   return null;
 }

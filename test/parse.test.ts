@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { loadConfig } from "../server/core/config";
 import { epicBranch, findEpicDir, loadLocal } from "../server/core/locate";
-import { ledgerEntry, parseEpic, parseHandoff, rowOf } from "../server/core/parse";
+import { ledgerEntry, parseEpic, parseHandoff, rowOf, storyOfName } from "../server/core/parse";
 import { slugify } from "../server/core/slug";
 import { fill, initE99, makeRoot, TODAY } from "./fixtures";
 
@@ -102,4 +102,53 @@ test("slugify handles unicode, punctuation, and length", () => {
   expect(slugify("Ünïcode & punctuation!!")).toBe("n-code-punctuation");
   expect(slugify("x".repeat(60))).toHaveLength(48);
   expect(slugify("---")).toBe("story");
+});
+
+test("an inline comment at the end of a row keeps the row", () => {
+  const text = "## Story list\n\n| Story | What | Lane | Status |\n| --- | --- | --- | --- |\n| A-1 Thing | x | normal | planned | <!-- note -->\n";
+  expect(parseEpic("/x/E1-y/EPIC.md", text).rows.map((r) => [r.id, r.status])).toEqual([["A-1", "planned"]]);
+});
+
+test("a row after closed comments in an earlier section is read; an unclosed comment hides the rest", () => {
+  const table = "## Story list\n\n| Story | What | Lane | Status |\n| --- | --- | --- | --- |\n| A-1 Thing | x | normal | planned |\n";
+  const closed = "## Goal\n\nWrite notes as `<!-- x -->`.\n\n<!--\nmore\n-->\n\n";
+  expect(parseEpic("/x/E1-y/EPIC.md", closed + table).rows.map((r) => r.id)).toEqual(["A-1"]);
+  // Markdown hides everything after an unclosed `<!--`.
+  expect(parseEpic("/x/E1-y/EPIC.md", "## Goal\n\n<!-- open\n\n" + table).rows).toEqual([]);
+});
+
+test("a commented Ledger example outside the Ledger section is not an entry", () => {
+  const text = [
+    "# E1 — X",
+    "",
+    "<!--",
+    "  ## Ledger",
+    "  ### S-1 — YYYY-MM-DD",
+    "-->",
+    "",
+    "## Story list",
+    "",
+    "## Ledger",
+    "",
+    "### S-1 — 2026-10-20 <!-- closed late -->",
+    "",
+    "- Shipped: one.",
+  ].join("\n");
+  expect(ledgerEntry(text, "S-1")).toBe("### S-1 — 2026-10-20 \n\n- Shipped: one.".replace(" \n", "\n"));
+});
+
+test("storyOfName picks the longest id, so S and S-1 never collide", () => {
+  const ids = ["S", "S-1", "S-10"];
+  expect(storyOfName(ids, "feat/", "feat/S-1-next")).toBe("S-1");
+  expect(storyOfName(ids, "feat/", "feat/S-base")).toBe("S");
+  expect(storyOfName(ids, "feat/", "feat/S-10-x")).toBe("S-10");
+  expect(storyOfName(ids, "", "S-1-packet")).toBe("S-1");
+  expect(storyOfName(ids, "feat/", "fix/S-1-x")).toBeUndefined();
+});
+
+test("findEpicDir refuses a ref that would leave the epics folder", async () => {
+  await initE99(root);
+  for (const ref of ["../E99-test-epic", "a/b", "a\\b", ".."]) {
+    expect(() => findEpicDir(root, loadConfig(root), ref), ref).toThrow("cannot hold `/`, `\\` or `..`");
+  }
 });

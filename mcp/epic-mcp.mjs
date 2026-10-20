@@ -43963,14 +43963,17 @@ function splitLines(text) {
 function folderEpicId(dir) {
   return basename(dir).split("-")[0];
 }
-function uncommented(lines) {
-  let inComment = false;
-  return lines.map((line) => {
-    if (line.includes("<!--")) inComment = true;
-    if (!inComment) return line;
-    if (line.includes("-->")) inComment = false;
-    return "";
-  });
+var COMMENT_RE = /<!--[\s\S]*?(?:-->|$)/g;
+var NOT_A_BREAK_RE = /[^\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029]/g;
+function stripComments(text) {
+  return text.replace(COMMENT_RE, (span) => span.replace(NOT_A_BREAK_RE, ""));
+}
+function storyOfName(ids, prefix, name) {
+  let best;
+  for (const id of ids) {
+    if (name.startsWith(`${prefix}${id}-`) && (best === void 0 || id.length > best.length)) best = id;
+  }
+  return best;
 }
 function parseEpic(path, text) {
   const dir = dirname(path);
@@ -43993,7 +43996,7 @@ function parseEpic(path, text) {
       }
     }
   }
-  epic.rows = parseRows(lines);
+  epic.rows = parseRows(splitLines(stripComments(text)));
   return epic;
 }
 function section(lines, heading) {
@@ -44008,10 +44011,9 @@ function section(lines, heading) {
   }
   return out;
 }
-function parseRows(lines) {
+function parseRows(clean) {
   const rows = [];
   let inside = false;
-  const clean = uncommented(lines);
   clean.forEach((line, i) => {
     if (line.startsWith("## ")) {
       inside = line.trim() === "## Story list";
@@ -44049,7 +44051,8 @@ function parseHandoff(text) {
 function ledgerEntry(text, story2) {
   const out = [];
   let inside = false;
-  for (const line of uncommented(section(splitLines(text), "## Ledger"))) {
+  for (const raw of section(splitLines(stripComments(text)), "## Ledger")) {
+    const line = raw.trimEnd();
     if (line.startsWith("### ")) {
       inside = line === `### ${story2}` || line.startsWith(`### ${story2} `);
       if (inside) out.push(line);
@@ -44093,6 +44096,11 @@ function findEpicDir(root2, config2, ref) {
   });
   if (byRow.length > 1) throw new EpicError(`${ref} is listed in more than one epic: ${names(byRow)}`);
   if (byRow.length === 1) return byRow[0];
+  if (/[/\\]|\.\./.test(ref)) {
+    throw new EpicError(
+      `\`${ref}\` is not an epic id or a story in a story list, and a folder name cannot hold \`/\`, \`\\\` or \`..\``
+    );
+  }
   const d = join2(base, ref);
   if (existsSync2(d) && statSync(d).isDirectory()) return d;
   throw new EpicError(`\`${ref}\` is not an epic id, a story in a story list, or a folder under ${base}`);
@@ -44119,12 +44127,12 @@ async function loadFromRef(root2, dir, ref) {
     handoff: r.code === 0 ? parseHandoff(r.stdout) : null
   };
 }
-async function packetSlug(root2, dir, branch, story2) {
+async function packetSlug(root2, dir, branch, story2, ids) {
   const rel = gitRel(root2, dir);
   const out = await run(["git", "ls-tree", "--name-only", `origin/${branch}`, `${rel}/`], root2, false);
   for (const line of splitLines(out)) {
     const name = line.split("/").pop() ?? "";
-    if (name.startsWith(`${story2}-`)) return name.slice(story2.length + 1);
+    if (storyOfName([...ids, story2], "", name) === story2) return name.slice(story2.length + 1);
   }
   return null;
 }
@@ -44170,8 +44178,12 @@ function requireHeader(handoff2, where) {
   }
   return handoff2;
 }
-async function storySlug(root2, dir, branch, story2, row) {
-  return await packetSlug(root2, dir, branch, story2) ?? slugify2(row?.title || story2);
+function storyIds(epic) {
+  return epic.rows.map((r) => r.id);
+}
+async function storySlug(root2, dir, branch, story2, epic) {
+  const fromPacket = await packetSlug(root2, dir, branch, story2, storyIds(epic));
+  return fromPacket ?? slugify2(rowOf(epic, story2)?.title || story2);
 }
 async function cmdInit(root2, config2, epicId, title, opts = {}) {
   if (!epicId || /[-/\\\s]/.test(epicId)) {
@@ -44237,7 +44249,7 @@ async function cmdStart(root2, config2, ref, opts = {}) {
   }
   const behind = (await run(["git", "rev-list", "--count", `origin/${branch}..origin/${config2.baseBranch}`], root2, false)).trim();
   const row = rowOf(epic, story2);
-  const storyBranch = `${config2.branchPrefix}${story2}-${await storySlug(root2, d, branch, story2, row)}`;
+  const storyBranch = `${config2.branchPrefix}${story2}-${await storySlug(root2, d, branch, story2, epic)}`;
   let action;
   if (opts.dryRun) {
     action = "dry-run";
@@ -44303,17 +44315,24 @@ function prBody(epic, story2, dir, nextStory, branch) {
   return parts.join("\n");
 }
 async function cmdClose(root2, config2, story2, opts = {}) {
+  const d = findEpicDir(root2, config2, story2);
+  const { epic, handoff: handoff2 } = loadLocal(d);
   const branch = await currentBranch(root2);
-  if (!branch.startsWith(`${config2.branchPrefix}${story2}-`)) {
+  if (storyOfName([...storyIds(epic), story2], config2.branchPrefix, branch) !== story2) {
     throw new EpicError(
       `current branch \`${branch}\` is not the story branch for ${story2}; check out \`${config2.branchPrefix}${story2}-\u2026\` and run close again`
     );
   }
-  const d = findEpicDir(root2, config2, story2);
-  const { epic, handoff: handoff2 } = loadLocal(d);
   const target = epicBranch(config2, d);
   const rel = gitRel(root2, d);
-  const nextStory = requireHeader(handoff2, `in ${rel}`).next;
+  const header = requireHeader(handoff2, `in ${rel}`);
+  if (header.after !== story2) {
+    throw new EpicError(`HANDOFF.md says after=${header.after}; set after=${story2} before epic_close`);
+  }
+  if (header.next === story2) {
+    throw new EpicError(`HANDOFF.md still says next=${story2}; point next= at the following story or none`);
+  }
+  const nextStory = header.next;
   const others = splitLines(await gitDirty(root2)).filter((ln) => !ln.includes(rel));
   if (others.length > 0) {
     throw new EpicError(
@@ -44388,8 +44407,8 @@ async function cmdClose(root2, config2, story2, opts = {}) {
   }
   return result;
 }
-function pickMergedPr(prs, story2, prefix = "feat/") {
-  return prs.find((pr) => pr.headRefName.startsWith(`${prefix}${story2}-`)) ?? null;
+function pickMergedPr(prs, story2, prefix, ids) {
+  return prs.find((pr) => storyOfName([...ids, story2], prefix, pr.headRefName) === story2) ?? null;
 }
 async function cmdNext(root2, config2, story2, opts = {}) {
   const d = findEpicDir(root2, config2, story2);
@@ -44401,6 +44420,13 @@ async function cmdNext(root2, config2, story2, opts = {}) {
   const { epic, handoff: tipHandoff } = await loadFromRef(root2, d, `origin/${branch}`);
   const handoff2 = requireHeader(tipHandoff, `on origin/${branch}`);
   if (handoff2.after !== story2) {
+    const order = storyIds(epic);
+    const later = order.includes(story2) && order.indexOf(handoff2.after) > order.indexOf(story2);
+    if (later) {
+      throw new EpicError(
+        `${story2} is not the last closed story on origin/${branch}; the handoff there says after=${handoff2.after}, so run next ${handoff2.after}`
+      );
+    }
     throw new EpicError(
       `${story2} is not merged into origin/${branch} yet (the handoff there says after=${handoff2.after}); merge the story PR first, then run next again`
     );
@@ -44408,7 +44434,7 @@ async function cmdNext(root2, config2, story2, opts = {}) {
   let pr = null;
   let comments = [];
   if (!opts.noGh && await ghAvailable()) {
-    pr = pickMergedPr(await ghMergedPrs(root2, branch), story2, config2.branchPrefix);
+    pr = pickMergedPr(await ghMergedPrs(root2, branch), story2, config2.branchPrefix, storyIds(epic));
     if (pr === null) {
       throw new EpicError(
         `no merged PR into ${branch} has a \`${config2.branchPrefix}${story2}-*\` head; merge the story PR first`
@@ -44424,7 +44450,7 @@ async function cmdNext(root2, config2, story2, opts = {}) {
       story: nxt,
       title: row?.title ?? "",
       lane: row?.lane ?? "",
-      branch: `${config2.branchPrefix}${nxt}-${await storySlug(root2, d, branch, nxt, row)}`,
+      branch: `${config2.branchPrefix}${nxt}-${await storySlug(root2, d, branch, nxt, epic)}`,
       baseRef: `origin/${branch}`
     };
   }
@@ -44435,10 +44461,11 @@ async function statusDir(root2, config2) {
   const packages = subdirs(base).filter(hasMarkers).map((d) => ({ d, ...loadLocal(d) }));
   if (packages.length === 0) throw new EpicError(`no epic package under ${base}; run init first`);
   const branch = (await runRaw(["git", "rev-parse", "--abbrev-ref", "HEAD"], root2)).stdout.trim();
-  const hit = packages.find(
-    ({ d, epic }) => epicBranch(config2, d) === branch || epic.rows.some((r) => branch.startsWith(`${config2.branchPrefix}${r.id}-`))
-  );
-  if (hit) return hit.d;
+  const onEpic = packages.find(({ d }) => epicBranch(config2, d) === branch);
+  if (onEpic) return onEpic.d;
+  const story2 = storyOfName(packages.flatMap(({ epic }) => storyIds(epic)), config2.branchPrefix, branch);
+  const onStory = story2 === void 0 ? void 0 : packages.find(({ epic }) => rowOf(epic, story2) !== void 0);
+  if (onStory) return onStory.d;
   const open2 = packages.filter(({ handoff: handoff2 }) => handoff2?.next !== "none");
   const pool = open2.length > 0 ? open2 : packages;
   const newer = (a, b) => folderEpicId(b).localeCompare(folderEpicId(a), void 0, { numeric: true }) > 0;
@@ -44467,7 +44494,8 @@ async function cmdStatus(root2, config2, ref) {
     next: handoff2?.found ? handoff2.next : "",
     behind: count.code === 0 ? count.stdout.trim() : null,
     rows: epic.rows,
-    openPr
+    openPr,
+    closeHooks: config2.hooks.close
   };
 }
 
