@@ -1,6 +1,16 @@
 import { expect, test } from "vitest";
 import type { NextResult } from "../server/core/commands";
-import { afterClose, afterCloseCheck, afterNext, nextPrompt, parsePendingLine, pendingLine } from "../server/core/text";
+import {
+  afterClose,
+  afterInit,
+  afterNext,
+  afterStart,
+  closeInstructions,
+  nextPrompt,
+  noEpicYet,
+  parsePendingLine,
+  pendingLine,
+} from "../server/core/text";
 
 // The copy pinned here is fixed by spec sections 6 and 8.
 
@@ -36,13 +46,45 @@ test("afterClose names the PR and the wait for the merge", () => {
   expect(text).toContain("Do not build the next story here");
 });
 
-test("afterCloseCheck with problems names the ledger bullets and the handoff headings", () => {
-  const text = afterCloseCheck(["p"]);
-  expect(text).toContain("call epic_close_check again");
-  for (const bullet of ["Branch / PR", "Shipped", "Decisions", "Deviations", "Effects on later stories"]) {
-    expect(text).toContain(bullet);
+test("afterInit quotes the init hooks between filling the package and pushing it", () => {
+  expect(afterInit("epic/E1-x", ["Mint the story ids.", "Run the repo check."]).split("\n")).toEqual([
+    "Created the epic package on branch epic/E1-x. Fill EPIC.md and HANDOFF.md for the first story.",
+    "Mint the story ids.",
+    "Run the repo check.",
+    "Then commit and push the epic branch. " +
+      "The first story starts in a fresh agent with epic_start; do not build it in this session.",
+  ]);
+});
+
+test("afterStart quotes the start hooks, then the close hooks under 'When the story is done:'", () => {
+  expect(afterStart("S-1", ["Run the gate."], ["Fill the ledger.", "Run the repo check."]).split("\n")).toEqual([
+    "This handoff is your context. Read the files it lists. " +
+      "Do not re-read the whole EPIC.md unless the handoff sends you there. Run the gate.",
+    "When the story is done:",
+    "Fill the ledger.",
+    "Run the repo check.",
+    "Call epic_close with S-1.",
+  ]);
+});
+
+test("closeInstructions is the close hooks, then the epic_close call", () => {
+  expect(closeInstructions("S-1", [])).toBe("Call epic_close with S-1.");
+  expect(closeInstructions("S-1", ["x"])).toBe("x\nCall epic_close with S-1.");
+});
+
+test("the agent text carries no project rules", () => {
+  const all = [
+    afterInit("epic/E1-x", []),
+    afterStart("S-1", [], []),
+    closeInstructions("S-1", []),
+    noEpicYet("docs/stories/epics"),
+    afterNext(result, null),
+    nextPrompt(result),
+  ].join("\n");
+  for (const word of ["epic_check", "epic_close_check", "ledger", "five bullets", "Done", "story packet", "/epic "]) {
+    expect(all, word).not.toContain(word);
   }
-  expect(text).toContain("headings 1 to 5");
+  expect(noEpicYet("d")).toContain("Call epic_init with an epic id and a title");
 });
 
 test("afterNext names the started agent and the plan stop", () => {
@@ -55,7 +97,7 @@ test("afterNext with no agent names the branch to start by hand", () => {
   const text = afterNext(result, null);
   expect(text.startsWith("TH-667 Procedure reads is next; the successor is not started yet.")).toBe(true);
   expect(text).toContain("feat/TH-667-procedure-reads");
-  expect(text).toContain("`/epic start TH-667`");
+  expect(text).toContain("tell it to call epic_start with TH-667");
 });
 
 test("afterNext pending tells the agent to wait for the successor's name", () => {
@@ -66,12 +108,12 @@ test("afterNext pending tells the agent to wait for the successor's name", () =>
   );
   const noGh = afterNext({ ...result, closed: { ...result.closed, pr: null } }, "pending");
   expect(noGh).toContain("`gh` was not available");
-  expect(noGh).not.toContain("/epic start");
+  expect(noGh).not.toContain("epic_start");
 });
 
 test("nextPrompt carries the start line, the PR answers and the extra line", () => {
   const text = nextPrompt(result, "extra");
-  expect(text.startsWith("/epic start TH-667")).toBe(true);
+  expect(text.startsWith("Start story TH-667: call the epic_start tool with TH-667.")).toBe(true);
   expect(text).toContain("Answers from PR #276 (conversation comments, oldest first):");
   expect(text).toContain("Q3: use the mirror rule.");
   expect(text.endsWith("extra")).toBe(true);
@@ -102,11 +144,16 @@ test("pendingLine is the exact handshake line and parsePendingLine reads it back
   expect(parsePendingLine(line)).toEqual({ next: "TH-667", closed: "TH-666" });
 });
 
+test("parsePendingLine reads ids of any shape", () => {
+  expect(parsePendingLine(pendingLine("story-7", "ABC"))).toEqual({ next: "story-7", closed: "ABC" });
+  expect(parsePendingLine(pendingLine("TH-E10-2", "TH-E10-1"))).toEqual({ next: "TH-E10-2", closed: "TH-E10-1" });
+});
+
 test("parsePendingLine matches a whole line only", () => {
   const line = pendingLine("TH-667", "TH-666");
   expect(parsePendingLine(`  "body": "${line}"`)).toBeNull();
   expect(parsePendingLine(`${line} And more.`)).toBeNull();
-  expect(parsePendingLine("Spawn pending for th-667 after TH-666: the plugin starts the successor now.")).toBeNull();
+  expect(parsePendingLine("Spawn pending for TH 667 after TH-666: the plugin starts the successor now.")).toBeNull();
   expect(parsePendingLine("Spawn pending for TH-667: the plugin starts the successor now.")).toBeNull();
   expect(parsePendingLine("")).toBeNull();
 });

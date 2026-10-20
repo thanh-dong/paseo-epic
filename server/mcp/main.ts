@@ -1,10 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { closeProblems, cmdCheck, cmdClose, cmdInit, cmdNext, cmdStart, cmdStatus } from "../core/commands";
+import { cmdClose, cmdInit, cmdNext, cmdStart, cmdStatus } from "../core/commands";
 import { loadConfig } from "../core/config";
 import { isEpicRepo } from "../core/locate";
-import { afterClose, afterCloseCheck, afterInit, afterNext, afterStart, noEpicYet, pendingLine } from "../core/text";
+import { afterClose, afterInit, afterNext, afterStart, noEpicYet, pendingLine } from "../core/text";
 import { EpicError } from "../core/types";
 
 // The stdio MCP server the create hook gives every agent in an epic repo.
@@ -40,7 +40,7 @@ const story = { story: z.string() };
 server.registerTool(
   "epic_status",
   {
-    description: "Call to see the epic package this repo is on: its state, story rows, next story and problems.",
+    description: "Call to see the epic package this repo is on: its state, story rows and next story.",
     inputSchema: {},
   },
   () =>
@@ -52,8 +52,8 @@ server.registerTool(
       }
       const result = await cmdStatus(root, config);
       let next: string;
-      if (result.problems.length > 0) next = "The package has problems. Fix the listed problems, then call epic_check.";
-      else if (result.next === "none" || result.next === "") next = `${result.epic} has no open story.`;
+      if (result.next === "") next = `${result.epic} has no HANDOFF.md handoff header, so it names no next story.`;
+      else if (result.next === "none") next = `${result.epic} has no open story.`;
       else next = `The next open story is ${result.next}. To begin it, call epic_start with ${result.next}.`;
       return { result, next };
     }),
@@ -68,8 +68,9 @@ server.registerTool(
   },
   ({ epic, title }) =>
     answer(async () => {
-      const result = await cmdInit(root, loadConfig(root), epic, title);
-      return { result, next: afterInit(result.branch) };
+      const config = loadConfig(root);
+      const result = await cmdInit(root, config, epic, title);
+      return { result, next: afterInit(result.branch, config.hooks.init) };
     }),
 );
 
@@ -84,23 +85,7 @@ server.registerTool(
     answer(async () => {
       const config = loadConfig(root);
       const result = await cmdStart(root, config, id, {});
-      return { result, next: afterStart(config.hooks.start) };
-    }),
-);
-
-server.registerTool(
-  "epic_close_check",
-  {
-    description:
-      "Call after updating the story row, ledger entry and HANDOFF.md, to list what still stops the story from closing.",
-    inputSchema: story,
-  },
-  ({ story: id }) =>
-    answer(async () => {
-      const config = loadConfig(root);
-      const problems = await closeProblems(root, config, id);
-      // The `.epic.yml` close hooks follow the paragraph, one per line, ready or not.
-      return { result: { problems }, next: [afterCloseCheck(problems), ...config.hooks.close].join("\n") };
+      return { result, next: afterStart(result.story, config.hooks.start, config.hooks.close) };
     }),
 );
 
@@ -108,7 +93,7 @@ server.registerTool(
   "epic_close",
   {
     description:
-      "Call once epic_close_check reports ready: it commits the epic folder, pushes, and opens the story PR.",
+      "Call when the story is done and the close steps from epic_start are met: it commits the epic folder, pushes, and opens the story PR.",
     inputSchema: story,
   },
   ({ story: id }) =>
@@ -131,20 +116,6 @@ server.registerTool(
       // The pending line comes first, on its own line: the turn-ended hook reads it there.
       const first = result.next === null ? undefined : pendingLine(result.next.story, result.closed.story);
       return { first, result, next: afterNext(result, "pending") };
-    }),
-);
-
-server.registerTool(
-  "epic_check",
-  {
-    description: "Call to lint an epic package (or every package when no epic id is given) after editing it.",
-    inputSchema: { epic: z.string().optional() },
-  },
-  ({ epic }) =>
-    answer(async () => {
-      const result = await cmdCheck(root, loadConfig(root), epic);
-      const clean = result.every((r) => r.problems.length === 0);
-      return { result, next: clean ? "ok" : "Fix the listed problems, then call epic_check again." };
     }),
 );
 

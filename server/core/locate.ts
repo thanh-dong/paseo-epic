@@ -2,17 +2,21 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join, relative, sep } from "node:path";
 import { type EpicConfig, hasConfigFile, loadConfig } from "./config";
 import { run, runRaw } from "./git";
-import { parseEpic, parseHandoff, splitLines } from "./parse";
-import { rowOf } from "./check";
-import { EPIC_ID_RE, type EpicPackage, EpicError, type Handoff, STATUS_BEGIN, STORY_ID_RE } from "./types";
+import { folderEpicId, parseEpic, parseHandoff, rowOf, splitLines } from "./parse";
+import { type EpicPackage, EpicError, type Handoff, STATUS_BEGIN } from "./types";
 
 export function epicsDir(root: string, config: EpicConfig): string {
   return join(root, config.epicsDir);
 }
 
-/** Python's repr of a list of folder names, kept so refusals match epic.py. */
-function pyList(dirs: string[]): string {
-  return `[${dirs.map((d) => `'${basename(d)}'`).join(", ")}]`;
+/** The epic branch of the package in `dir`: `<epicBranchPrefix><folder>`. */
+export function epicBranch(config: EpicConfig, dir: string): string {
+  return `${config.epicBranchPrefix}${basename(dir)}`;
+}
+
+/** Folder names for a refusal. */
+function names(dirs: string[]): string {
+  return dirs.map((d) => basename(d)).join(", ");
 }
 
 /** Sorted sub-folders of `base`; none when `base` does not exist. */
@@ -46,32 +50,26 @@ export function hasMarkers(dir: string): boolean {
   return existsSync(f) && readFileSync(f, "utf8").includes(STATUS_BEGIN);
 }
 
-/** `ref` is an epic id (E20), a story id (TH-652), or a folder name. */
+/**
+ * `ref` is opaque: the package whose folder name before the first `-` is
+ * `ref`; else the package whose story list has a row `ref`; else the folder
+ * named `ref`.
+ */
 export function findEpicDir(root: string, config: EpicConfig, ref: string): string {
   const base = epicsDir(root, config);
   const dirs = subdirs(base);
-  if (EPIC_ID_RE.test(ref)) {
-    const hits = dirs.filter((d) => basename(d).split("-")[0] === ref);
-    if (hits.length === 0) throw new EpicError(`no epic folder ${ref}-* under ${base}`);
-    if (hits.length > 1) {
-      throw new EpicError(`more than one folder for ${ref}: ${pyList(hits)}`);
-    }
-    return hits[0];
-  }
-  if (STORY_ID_RE.test(ref)) {
-    const hits = dirs.filter((d) => {
-      const f = join(d, "EPIC.md");
-      return existsSync(f) && rowOf(parseEpic(f, readFileSync(f, "utf8")), ref) !== undefined;
-    });
-    if (hits.length === 0) throw new EpicError(`no EPIC.md story list contains ${ref}`);
-    if (hits.length > 1) {
-      throw new EpicError(`${ref} is listed in more than one epic: ${pyList(hits)}`);
-    }
-    return hits[0];
-  }
+  const byId = dirs.filter((d) => folderEpicId(d) === ref);
+  if (byId.length > 1) throw new EpicError(`more than one folder for ${ref}: ${names(byId)}`);
+  if (byId.length === 1) return byId[0];
+  const byRow = dirs.filter((d) => {
+    const f = join(d, "EPIC.md");
+    return existsSync(f) && rowOf(parseEpic(f, readFileSync(f, "utf8")), ref) !== undefined;
+  });
+  if (byRow.length > 1) throw new EpicError(`${ref} is listed in more than one epic: ${names(byRow)}`);
+  if (byRow.length === 1) return byRow[0];
   const d = join(base, ref);
   if (existsSync(d) && statSync(d).isDirectory()) return d;
-  throw new EpicError(`\`${ref}\` is not an epic id, a story id, or a folder under ${base}`);
+  throw new EpicError(`\`${ref}\` is not an epic id, a story in a story list, or a folder under ${base}`);
 }
 
 export function loadLocal(dir: string): { epic: EpicPackage; handoff: Handoff | null } {

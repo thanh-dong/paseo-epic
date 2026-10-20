@@ -8,17 +8,9 @@ function paragraph(parts: string[]): string {
   return parts.filter((p) => p.length > 0).join(" ");
 }
 
-/** What `/epic close` sends the story's agent. */
+/** What `/epic close` sends the story's agent: the close lines, one per line, then the call. */
 export function closeInstructions(story: string, hooks: string[]): string {
-  return paragraph([
-    `Close story ${story}. Update the epic package by hand:`,
-    `set the ${story} row to \`implemented\` with Done \`YYYY-MM-DD PR #n\` (\`PR pending\` while the number is not known);`,
-    `append the ledger entry \`### ${story} — YYYY-MM-DD\` with five bullets:`,
-    "Branch / PR, Shipped, Decisions, Deviations, Effects on later stories;",
-    `rewrite HANDOFF.md whole with headings 1 to 5 and the header \`after=${story}\`.`,
-    ...hooks,
-    `Then call epic_close_check with ${story} until it reports ready, and call epic_close with ${story}.`,
-  ]);
+  return [...hooks, `Call epic_close with ${story}.`].join("\n");
 }
 
 /** What `/epic start` sends the workspace's agent. */
@@ -30,7 +22,7 @@ export function startInstructions(story: string): string {
   ]);
 }
 
-export const USAGE = "Usage: /epic <init|start|close|next|check|status> [id]";
+export const USAGE = "Usage: /epic <init|start|close|next|status> [id]";
 
 export function noAgent(verb: string): string {
   return `No agent in this workspace; create one, then run /epic ${verb} again.`;
@@ -38,15 +30,12 @@ export function noAgent(verb: string): string {
 
 export const labels = {
   loading: "Reading the epic package…",
-  noEpic: 'This workspace has no epic package. Run /epic init E1 "Title".',
-  check: "Check",
+  noEpic: 'This workspace has no epic package. Create one with /epic init <epic> "<title>", or ask an agent to call epic_init.',
   startNext: "Start next story",
   working: "Working…",
   columns: { story: "Story", lane: "Lane", status: "Status", done: "Done" },
   noStories: "No stories in the table yet.",
   waitingForMerge: "waiting for merge",
-  lastCheckOk: "Last check: ok",
-  lastCheckProblems: "Last check: problems",
   refresh: "Refresh",
   openWorkspace: "Open workspace",
   openAgent: "Open agent",

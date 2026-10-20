@@ -272,10 +272,10 @@ test("a gh failure that is not a refusal propagates", async () => {
   await expect(resolveStoryChanges(deps, { root, story: "TH-902" })).rejects.toThrow("boom");
 });
 
-test("an id that is not a story id refuses with the next step", async () => {
+test("an epic id is no row of the package: refuses as an unknown story", async () => {
   const { deps } = fakeDeps({});
   await expect(resolveStoryChanges(deps, { root, story: "E99" })).rejects.toThrow(
-    "`E99` is not a story id like TH-652; check the story id",
+    "no epic package lists E99 in this checkout",
   );
 });
 

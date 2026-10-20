@@ -86,11 +86,11 @@ export function registerSpawnOnNext(
         found === pending.next
           ? out.message
           : `Spawn mismatch: the plugin found ${found} as the next story but the agent announced ${pending.next}; ` +
-            `start the next story by hand with /epic start ${pending.next}.`;
+            `start the next story by hand: tell a fresh agent in its worktree to call epic_start with ${pending.next}.`;
     } catch (err) {
       text =
         `Spawn failed: ${err instanceof Error ? err.message : String(err)}. ` +
-        `Start the next story by hand with /epic start ${pending.next}.`;
+        `Start the next story by hand: tell a fresh agent in its worktree to call epic_start with ${pending.next}.`;
     }
     try {
       await paseo.agents.ref(event.agent.id).send(text);

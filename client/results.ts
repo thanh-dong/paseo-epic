@@ -21,8 +21,6 @@ export interface PanelResult {
   status?: Status;
   /** The `next` message. */
   message?: string;
-  /** Check problems; an empty list shows "Last check: ok". */
-  problems?: string[];
   /** RPC error text, shown inline. */
   error?: string;
 }
@@ -47,11 +45,6 @@ export function onResult(listener: () => void): () => void {
   return () => {
     listeners.delete(listener);
   };
-}
-
-/** The last path segment of a package folder. */
-export function folderName(dir: string): string {
-  return dir.split(/[\\/]/).filter(Boolean).pop() ?? dir;
 }
 
 /** The text of a thrown RPC error; YAML errors keep their line breaks. */

@@ -8,15 +8,18 @@ export interface EpicConfig {
   epicsDir: string;
   templates?: string;
   branchPrefix: string;
+  /** The epic branch is `<epicBranchPrefix><package folder>`. */
+  epicBranchPrefix: string;
   baseBranch: string;
   profile?: string;
-  hooks: { start: string[]; close: string[]; nextPrompt?: string };
+  hooks: { init: string[]; start: string[]; close: string[]; nextPrompt?: string };
 }
 
 const CONFIG_FILE = ".epic.yml";
 
 const hooksSchema = z
   .object({
+    init: z.array(z.string()).default([]),
     start: z.array(z.string()).default([]),
     close: z.array(z.string()).default([]),
     nextPrompt: z.string().optional(),
@@ -28,9 +31,10 @@ const configSchema = z
     epicsDir: z.string().default("docs/stories/epics"),
     templates: z.string().optional(),
     branchPrefix: z.string().default("feat/"),
+    epicBranchPrefix: z.string().default("epic/"),
     baseBranch: z.string().default("main"),
     profile: z.string().optional(),
-    hooks: hooksSchema.default({ start: [], close: [] }),
+    hooks: hooksSchema.default({ init: [], start: [], close: [] }),
   })
   .strict();
 

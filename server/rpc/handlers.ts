@@ -1,6 +1,5 @@
 import type { PluginServerContext } from "@getpaseo/plugin/server";
 import {
-  checkRpc,
   closeRpc,
   initRpc,
   isEpicRpc,
@@ -9,7 +8,7 @@ import {
   statusRpc,
   storyChangesRpc,
 } from "../../shared/contracts";
-import { cmdCheck, cmdClose, cmdInit, cmdNext, cmdStart, cmdStatus } from "../core/commands";
+import { cmdClose, cmdInit, cmdNext, cmdStart, cmdStatus } from "../core/commands";
 import { loadConfig } from "../core/config";
 import { localBranchExists } from "../core/git";
 import { isEpicRepo } from "../core/locate";
@@ -61,9 +60,6 @@ export function registerHandlers(
 ): void {
   server.handle(statusRpc, ({ workspaceDir, ref }) =>
     refusalsAsErrors(() => cmdStatus(workspaceDir, loadConfig(workspaceDir), ref)),
-  );
-  server.handle(checkRpc, ({ workspaceDir, ref }) =>
-    refusalsAsErrors(() => cmdCheck(workspaceDir, loadConfig(workspaceDir), ref)),
   );
   server.handle(initRpc, ({ workspaceDir, epicId, title }) =>
     refusalsAsErrors(() => cmdInit(workspaceDir, loadConfig(workspaceDir), epicId, title)),

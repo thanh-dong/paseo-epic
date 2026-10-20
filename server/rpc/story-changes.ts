@@ -1,10 +1,10 @@
 import { type StoryChanges, storyChanges } from "../core/changes";
-import { epicBranch, rowOf } from "../core/check";
 import { pickMergedPr } from "../core/commands";
 import { loadConfig } from "../core/config";
 import { ghAvailable, ghMergedPrs, ghOpenPrs } from "../core/git";
-import { findEpicDir, loadLocal } from "../core/locate";
-import { EpicError, STORY_ID_RE } from "../core/types";
+import { epicBranch, findEpicDir, loadLocal } from "../core/locate";
+import { rowOf } from "../core/parse";
+import { EpicError } from "../core/types";
 import type { PaseoApi } from "../sdk-types";
 
 interface WorkspaceEntry {
@@ -83,8 +83,9 @@ async function findPr(
 }
 
 /**
- * A story's row, workspace, agent, PR and changed files. Only an unknown story
- * and a missing remote epic branch refuse; anything else not found is null.
+ * A story's row, workspace, agent, PR and changed files. Only a story that is
+ * no row of a package and a missing remote epic branch refuse; anything else
+ * not found is null.
  */
 export async function resolveStoryChanges(
   deps: StoryChangesDeps,
@@ -92,14 +93,13 @@ export async function resolveStoryChanges(
 ): Promise<StoryChangesResult> {
   const { root, story } = input;
   const config = loadConfig(root);
-  if (!STORY_ID_RE.test(story)) throw new EpicError(`\`${story}\` is not a story id like TH-652; check the story id`);
   const unknown =
     `no epic package lists ${story} in this checkout; check out the epic branch or a story branch, or open the panel in the story's worktree`;
   let dir: string;
   try {
     dir = findEpicDir(root, config, story);
   } catch (err) {
-    if (err instanceof EpicError && err.message.startsWith("no EPIC.md story list contains")) {
+    if (err instanceof EpicError && err.message.startsWith(`\`${story}\` is not an epic id`)) {
       throw new EpicError(unknown);
     }
     throw err;
@@ -107,7 +107,7 @@ export async function resolveStoryChanges(
   const { epic } = loadLocal(dir);
   const row = rowOf(epic, story);
   if (row === undefined) throw new EpicError(unknown);
-  const base = epicBranch(epic);
+  const base = epicBranch(config, dir);
 
   // Search the caller's project only; a caller in no workspace searches them all.
   const all = (await deps.listWorkspaces()).filter((w) => w.directory !== "");

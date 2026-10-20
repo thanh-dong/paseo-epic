@@ -9,7 +9,7 @@ import { pendingLine } from "../server/core/text";
 import type { SpawnNext } from "../server/core/types";
 import { pendingNextFromTimeline, registerSpawnOnNext } from "../server/hooks/spawn-on-next";
 import { findWorkspaceByBranch } from "../server/rpc/handlers";
-import { createSpawnNext } from "../server/rpc/next";
+import { createSpawnNext, lastClosedStory } from "../server/rpc/next";
 import type { AgentTimelineItem, PaseoApi } from "../server/sdk-types";
 import { makeRoot } from "./fixtures";
 
@@ -41,8 +41,9 @@ const nextResult: NextResult = {
 const baseConfig: EpicConfig = {
   epicsDir: "docs/stories/epics",
   branchPrefix: "feat/",
+  epicBranchPrefix: "epic/",
   baseBranch: "main",
-  hooks: { start: [], close: [], nextPrompt: "Use the story profile." },
+  hooks: { init: [], start: [], close: [], nextPrompt: "Use the story profile." },
 };
 
 type Profile = {
@@ -131,7 +132,7 @@ test("spawns the successor with the handoff prompt and the PR answers", async ()
   expect(calls.agents).toHaveLength(1);
   const agent = calls.agents[0];
   const prompt = agent.prompt as string;
-  expect(prompt).toContain("/epic start TH-902");
+  expect(prompt.startsWith("Start story TH-902: call the epic_start tool with TH-902.")).toBe(true);
   expect(prompt).toContain("Answers from PR #7");
   expect(prompt).toContain("Q1: keep the old flag.");
   expect(prompt).toContain("Use the story profile.");
@@ -372,7 +373,7 @@ test("the turn-ended hook reports a mismatch instead of claiming success", async
       id: "ag_0",
       text:
         "Spawn mismatch: the plugin found TH-903 as the next story but the agent announced TH-902; " +
-        "start the next story by hand with /epic start TH-902.",
+        "start the next story by hand: tell a fresh agent in its worktree to call epic_start with TH-902.",
     },
   ]);
 });
@@ -411,7 +412,9 @@ test("the turn-ended hook sends a spawn failure as text and does not throw", asy
   expect(sent).toEqual([
     {
       id: "ag_0",
-      text: "Spawn failed: branch exists. Start the next story by hand with /epic start TH-902.",
+      text:
+        "Spawn failed: branch exists. " +
+        "Start the next story by hand: tell a fresh agent in its worktree to call epic_start with TH-902.",
     },
   ]);
 });
@@ -442,12 +445,11 @@ test("findWorkspaceByBranch pages through workspaces and matches the current bra
   expect(await findWorkspaceByBranch(paseo, "feat/none")).toBeNull();
 });
 
-/** Init `id` without git and give it one closed story `story` in the ledger. */
+/** Init `id` without git; its handoff names `story` as the last closed one (`after=`). */
 async function initWithClosedStory(root: string, id: string, story: string): Promise<void> {
   const { dir } = await cmdInit(root, baseConfig, id, `Epic ${id}`, { noGit: true });
-  const f = join(dir, "EPIC.md");
-  const ledger = `### ${story} — 2026-09-06\n\n- Shipped: it.\n\n## Dependencies`;
-  writeFileSync(f, readFileSync(f, "utf8").replace("## Dependencies", ledger));
+  const h = join(dir, "HANDOFF.md");
+  writeFileSync(h, readFileSync(h, "utf8").replace("after=none next=none", `after=${story} next=X-1`));
 }
 
 test("a ref picks that package's last closed story when a higher package exists", async () => {
@@ -469,6 +471,20 @@ test("a ref picks that package's last closed story when a higher package exists"
     await spawnNext({ root, ref: "E97" });
     await spawnNext({ root });
     expect(seen).toEqual(["TH-971", "TH-981"]);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("lastClosedStory reads the handoff's after= and refuses none or a missing header", async () => {
+  const root = makeRoot(mkdtempSync(join(tmpdir(), "epic-next-after-")));
+  try {
+    await initWithClosedStory(root, "E95", "story-7");
+    expect(await lastClosedStory(root, baseConfig, "E95")).toBe("story-7");
+    const { dir } = await cmdInit(root, baseConfig, "E96", "Fresh", { noGit: true });
+    await expect(lastClosedStory(root, baseConfig, "E96")).rejects.toThrow("E96 has no closed story yet");
+    writeFileSync(join(dir, "HANDOFF.md"), "# no header\n");
+    await expect(lastClosedStory(root, baseConfig, "E96")).rejects.toThrow("E96 has no HANDOFF.md handoff header");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

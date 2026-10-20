@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { expect } from "vitest";
-import { type CloseResult, cmdCheck, cmdClose, cmdInit, cmdRender, cmdStart } from "../server/core/commands";
+import { type CloseResult, cmdClose, cmdInit, cmdStart } from "../server/core/commands";
 import { loadConfig } from "../server/core/config";
 import { currentBranch } from "../server/core/git";
 import { today } from "../server/core/slug";
@@ -19,6 +19,9 @@ process.env.GIT_CONFIG_NOSYSTEM ??= "1";
 const TEMPLATES = fileURLToPath(new URL("../templates", import.meta.url));
 
 export const TODAY = today();
+
+/** The one story row of the shipped epic template. */
+export const TEMPLATE_ROW = "| S-1 Story title | What it builds, in one or two sentences. | normal | planned | |";
 
 export const ROWS = `| TH-901 First thing | Builds the first thing. | normal | implemented | 2026-09-06 PR #1 |
 | TH-902 Second thing | Builds the second thing. | normal | planned | |
@@ -54,7 +57,7 @@ export async function initE99(root: string): Promise<string> {
   return dir;
 }
 
-/** Init E99, put rows/ledger/handoff in, render the status. */
+/** Init E99 and put rows, ledger and the handoff header in, as plain text. */
 export async function fill(
   root: string,
   opts: { rows?: string; ledger?: string; after?: string; next?: string } = {},
@@ -63,13 +66,9 @@ export async function fill(
   const d = await initE99(root);
   const f = join(d, "EPIC.md");
   const text = readFileSync(f, "utf8")
-    .replaceAll(
-      "| TH-NNN Story title | What it builds, in one or two sentences. | normal | planned | |",
-      rows,
-    )
+    .replaceAll(TEMPLATE_ROW, rows)
     .replaceAll("## Dependencies", `${ledger}\n## Dependencies`);
   writeFileSync(f, text);
-  await cmdRender(root, loadConfig(root), "E99");
   const h = join(d, "HANDOFF.md");
   writeFileSync(
     h,
@@ -114,28 +113,24 @@ export class RemoteFixture {
     rmSync(this.tmp, { recursive: true, force: true });
   }
 
-  /** Init E99 on its epic branch, plan three stories, check, commit and push. Returns the package dir. */
-  async planAndPush(): Promise<string> {
+  /**
+   * Init E99 on its epic branch, plan the stories (three TH-90x by default),
+   * point the handoff at the first, commit and push. Returns the package dir.
+   */
+  async planAndPush(
+    opts: { rows?: string; next?: string } = {},
+  ): Promise<string> {
+    const { rows = ROWS.replace("| implemented | 2026-09-06 PR #1 |", "| planned | |"), next = "TH-901" } = opts;
     const cfg = loadConfig(this.root);
     const { dir } = await cmdInit(this.root, cfg, "E99", "Test epic", { fromRef: "origin/main" });
-    expect(await currentBranch(this.root)).toBe("epic/E99-test-epic");
+    expect(await currentBranch(this.root)).toBe(`${cfg.epicBranchPrefix}E99-test-epic`);
     const f = join(dir, "EPIC.md");
-    const rows = ROWS.replace("| implemented | 2026-09-06 PR #1 |", "| planned | |");
-    writeFileSync(
-      f,
-      readFileSync(f, "utf8").replace(
-        "| TH-NNN Story title | What it builds, in one or two sentences. | normal | planned | |",
-        rows,
-      ),
-    );
-    await cmdRender(this.root, cfg, "E99");
+    writeFileSync(f, readFileSync(f, "utf8").replace(TEMPLATE_ROW, rows));
     const h = join(dir, "HANDOFF.md");
-    writeFileSync(h, readFileSync(h, "utf8").replace("next=none", "next=TH-901"));
-    const [result] = await cmdCheck(this.root, cfg, "E99");
-    expect(result.problems).toEqual([]);
+    writeFileSync(h, readFileSync(h, "utf8").replace("next=none", `next=${next}`));
     await git(this.root, "add", "-A");
     await git(this.root, "commit", "-q", "-m", "plan E99");
-    await git(this.root, "push", "-q", "-u", "origin", "epic/E99-test-epic");
+    await git(this.root, "push", "-q", "-u", "origin", `${cfg.epicBranchPrefix}E99-test-epic`);
     return dir;
   }
 
