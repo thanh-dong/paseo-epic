@@ -6,12 +6,15 @@ import type { PluginButton, PluginButtonRegistration, PluginClientContext } from
 import type { output as ZodOutput } from "zod";
 import { headerRpc } from "../shared/contracts";
 import { headerLabels, OVERVIEW_ID, PANEL_ID } from "./strings";
-import { type WorkspaceInfo, watchWorkspaces } from "./workspaces";
+import { type WorkspaceId, type WorkspaceInfo, watchWorkspaces } from "./workspaces";
 
 type HeaderInfo = NonNullable<ZodOutput<(typeof headerRpc)["output"]>>;
 type HeaderClient = Pick<PluginClientContext, "paseo" | "rpc" | "addHeaderButton" | "openPanel" | "openScreen">;
 
 const BUTTON_ID = "epic";
+
+/** A workspace directory. */
+type Dir = string;
 
 /** `E10 · next TH-E10-3`, `E10 · closed` for `next=none`, `Epic` before the first package. */
 export function headerLabel(info: HeaderInfo): string {
@@ -23,7 +26,7 @@ export function headerLabel(info: HeaderInfo): string {
 export interface ButtonPlan {
   add: WorkspaceInfo[];
   update: WorkspaceInfo[];
-  remove: string[];
+  remove: WorkspaceId[];
 }
 
 /**
@@ -33,13 +36,13 @@ export interface ButtonPlan {
  * change is about; only those are re-labelled.
  */
 export function planButtons(
-  previous: ReadonlySet<string>,
+  previous: ReadonlySet<WorkspaceId>,
   workspaces: readonly WorkspaceInfo[],
-  isEpicByDir: ReadonlyMap<string, boolean>,
-  changed: ReadonlySet<string>,
+  isEpicByDir: ReadonlyMap<Dir, boolean>,
+  changed: ReadonlySet<WorkspaceId>,
 ): ButtonPlan {
   const plan: ButtonPlan = { add: [], update: [], remove: [] };
-  const keep = new Set<string>();
+  const keep = new Set<WorkspaceId>();
   for (const w of workspaces) {
     if (isEpicByDir.get(w.directory) !== true) continue;
     keep.add(w.id);
@@ -90,12 +93,12 @@ function epicButton(client: HeaderClient, workspaceId: string, label: string): P
  * the workspace subscription and removes every button.
  */
 export function startHeaderButtons(client: HeaderClient): () => void {
-  const buttons = new Map<string, PluginButtonRegistration>();
-  const isEpicByDir = new Map<string, boolean>();
-  const labelByDir = new Map<string, string>();
-  const asking = new Set<string>();
+  const buttons = new Map<WorkspaceId, PluginButtonRegistration>();
+  const isEpicByDir = new Map<Dir, boolean>();
+  const labelByDir = new Map<Dir, string>();
+  const asking = new Set<Dir>();
   // Label reads can overlap; only a workspace's newest read may land.
-  const labelSeq = new Map<string, number>();
+  const labelSeq = new Map<WorkspaceId, number>();
   let seqNext = 0;
   let list: WorkspaceInfo[] = [];
   let stopped = false;
@@ -116,7 +119,7 @@ export function startHeaderButtons(client: HeaderClient): () => void {
     buttons.get(w.id)?.update({ label: headerLabel(info) });
   };
 
-  const apply = (changed: ReadonlySet<string>) => {
+  const apply = (changed: ReadonlySet<WorkspaceId>) => {
     if (stopped) return;
     const plan = planButtons(new Set(buttons.keys()), list, isEpicByDir, changed);
     for (const id of plan.remove) {

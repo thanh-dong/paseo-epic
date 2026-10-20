@@ -4,10 +4,20 @@ import type {
   PluginWorkspaceCommandContext,
 } from "@getpaseo/plugin/client";
 import { initRpc, nextRpc, statusRpc } from "./shared/contracts";
+import { makeEpicOverview } from "./client/EpicOverview";
 import { EpicPanel } from "./client/EpicPanel";
+import { EpicsSidebarItem } from "./client/EpicsSidebarItem";
 import { startHeaderButtons } from "./client/header";
 import { errorText, type PanelResult, postResult } from "./client/results";
-import { closeInstructions, noAgent, PANEL_ID, startInstructions, USAGE } from "./client/strings";
+import {
+  closeInstructions,
+  noAgent,
+  OVERVIEW_ID,
+  overviewLabels,
+  PANEL_ID,
+  startInstructions,
+  USAGE,
+} from "./client/strings";
 
 // Derived from the host SDK: `@getpaseo/client` is not installed on a production-only install.
 type PaseoApi = PluginCommandCapabilities["paseo"];
@@ -123,6 +133,12 @@ export default function contribute(client: PluginClientContext) {
         })),
     }),
     startHeaderButtons(client),
+    client.addScreen({
+      id: OVERVIEW_ID,
+      title: overviewLabels.title,
+      Component: makeEpicOverview((workspaceId) => client.openPanel(PANEL_ID, { workspaceId })),
+    }),
+    client.addSidebarFooterItem({ id: OVERVIEW_ID, title: overviewLabels.title, Component: EpicsSidebarItem }),
   ];
   return () => {
     for (const cleanup of cleanups) cleanup();

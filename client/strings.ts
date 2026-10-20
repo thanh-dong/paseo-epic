@@ -41,6 +41,23 @@ export const headerLabels = {
   overview: "Epic overview",
 } as const;
 
+/** The Epics screen and its sidebar item. */
+export const overviewLabels = {
+  title: "Epics",
+  refresh: "Refresh",
+  showClosed: "Show closed",
+  reading: "Reading the epic branches…",
+  none: "No project on this host has an epic branch on origin.",
+  openWorkspace: "Open workspace",
+  openPanel: "Open panel",
+  noPr: "PR: none",
+} as const;
+
+/** The line under a project whose epics are all closed and hidden. */
+export function closedHidden(count: number): string {
+  return `${count} closed ${count === 1 ? "epic" : "epics"} hidden`;
+}
+
 export const labels = {
   loading: "Reading the epic package…",
   noEpic: 'This workspace has no epic package. Create one with /epic init <epic> "<title>", or ask an agent to call epic_init.',

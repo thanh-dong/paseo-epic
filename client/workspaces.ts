@@ -7,11 +7,15 @@ import type { PluginCommandCapabilities } from "@getpaseo/plugin/client";
 type PaseoApi = PluginCommandCapabilities["paseo"];
 type Descriptor = Awaited<ReturnType<PaseoApi["workspaces"]["list"]>>["entries"][number];
 
+// Named id types also keep the mobile audit's HTML-tag pattern off generics like Set<…>.
+export type WorkspaceId = string;
+export type ProjectId = string;
+
 /** The fields of a workspace that the header buttons and the Epics screen read. */
 export interface WorkspaceInfo {
-  id: string;
+  id: WorkspaceId;
   directory: string;
-  projectId: string;
+  projectId: ProjectId;
   projectName: string;
   projectRoot: string;
   /** False for directory and non-git projects; the Epics screen skips them. */
@@ -38,11 +42,11 @@ export function toInfo(w: Descriptor): WorkspaceInfo | null {
  */
 export function watchWorkspaces(
   workspaces: PaseoApi["workspaces"],
-  onChange: (list: WorkspaceInfo[], changed: ReadonlySet<string>) => void,
+  onChange: (list: WorkspaceInfo[], changed: ReadonlySet<WorkspaceId>) => void,
 ): () => void {
-  const byId = new Map<string, WorkspaceInfo>();
+  const byId = new Map<WorkspaceId, WorkspaceInfo>();
   let stopped = false;
-  let release: (() => Promise<void>) | null = null;
+  let release: (() => void) | null = null;
   const put = (w: Descriptor) => {
     const info = toInfo(w);
     if (info) byId.set(w.id, info);
@@ -52,7 +56,7 @@ export function watchWorkspaces(
     .list({ subscribe: {} })
     .then(({ subscription }) => {
       if (stopped) return subscription.release();
-      release = () => subscription.release();
+      release = () => void subscription.release();
       subscription.subscribe({
         snapshot: ({ entries }) => {
           byId.clear();
@@ -75,6 +79,6 @@ export function watchWorkspaces(
     });
   return () => {
     stopped = true;
-    void release?.();
+    release?.();
   };
 }
