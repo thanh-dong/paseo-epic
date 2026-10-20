@@ -156,3 +156,25 @@ export const headerRpc = defineRpc({
   // null: the repo has neither `.epic.yml` nor an epic package, so no header button.
   output: z.object({ epic: z.string().nullable(), next: z.string() }).nullable(),
 });
+
+const overviewEpicSchema = z.object({
+  epic: z.string(),
+  title: z.string(),
+  branch: z.string(),
+  state: z.string(),
+  next: z.string(),
+  after: z.string(),
+  rows: z.object({ total: z.number(), open: z.number() }),
+  openPr: z.object({ number: z.number(), url: z.string(), headRefName: z.string() }).nullable(),
+  workspaceId: z.string().nullable(),
+});
+
+export const overviewRpc = defineRpc({
+  name: "epic.overview",
+  input: z.object({
+    projectRoot: workspaceDir,
+    workspaces: z.array(z.object({ id: z.string(), directory: z.string() })),
+    fetch: z.boolean().optional(),
+  }),
+  output: z.object({ project: z.string(), epics: z.array(overviewEpicSchema) }),
+});

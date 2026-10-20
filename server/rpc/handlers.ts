@@ -5,6 +5,7 @@ import {
   initRpc,
   isEpicRpc,
   nextRpc,
+  overviewRpc,
   startRpc,
   statusRpc,
   storyChangesRpc,
@@ -13,6 +14,7 @@ import { cmdClose, cmdInit, cmdNext, cmdStart, cmdStatus, headerInfo } from "../
 import { loadConfig } from "../core/config";
 import { localBranchExists } from "../core/git";
 import { isEpicRepo } from "../core/locate";
+import { overview } from "../core/overview";
 import { EpicError, type SpawnNext } from "../core/types";
 import type { PaseoApi } from "../sdk-types";
 import { createSpawnNext } from "./next";
@@ -82,5 +84,8 @@ export function registerHandlers(
   );
   server.handle(headerRpc, ({ workspaceDir }) =>
     refusalsAsErrors(() => headerInfo(workspaceDir, loadConfig(workspaceDir))),
+  );
+  server.handle(overviewRpc, ({ projectRoot, workspaces, fetch }) =>
+    refusalsAsErrors(() => overview(projectRoot, loadConfig(projectRoot), workspaces, { fetch })),
   );
 }
