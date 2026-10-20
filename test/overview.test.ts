@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
@@ -142,5 +142,62 @@ test("matchWorkspace: the epic branch, then a story branch of it, then the proje
   expect(matchWorkspace("epic/E1-x", ids, "feat/", "/repo", [root, story, epic])).toBe("epic");
   expect(matchWorkspace("epic/E1-x", ids, "feat/", "/repo", [root, other, story])).toBe("story");
   expect(matchWorkspace("epic/E1-x", ids, "feat/", "/repo", [other, root])).toBe("root");
+  // The same path written another way still matches the project root.
+  expect(matchWorkspace("epic/E1-x", ids, "feat/", "/repo", [other, ws("slash", "/repo/", "main")])).toBe("slash");
+  expect(matchWorkspace("epic/E1-x", ids, "feat/", "/repo/", [other, root])).toBe("root");
   expect(matchWorkspace("epic/E1-x", ids, "feat/", "/repo", [other, ws("gone", "/wt/g", null)])).toBeNull();
+});
+
+/**
+ * Put a fake `gh` first on PATH for `fn`: `--version` succeeds, `pr list`
+ * prints `prList`, and every call is logged. Returns the logged argument lines.
+ */
+async function withFakeGh(prList: string, fn: () => Promise<void>): Promise<string[]> {
+  const bin = join(fx.tmp, "bin");
+  mkdirSync(bin, { recursive: true });
+  const log = join(fx.tmp, "gh.log");
+  const out = join(fx.tmp, "gh.out");
+  writeFileSync(log, "");
+  writeFileSync(out, prList);
+  const gh = join(bin, "gh");
+  writeFileSync(
+    gh,
+    `#!/bin/sh\necho "$*" >> '${log}'\nif [ "$1" = "--version" ]; then echo "gh version 0"; exit 0; fi\ncat '${out}'\n`,
+  );
+  chmodSync(gh, 0o755);
+  const path = process.env.PATH;
+  process.env.PATH = `${bin}:${path}`;
+  try {
+    await fn();
+  } finally {
+    process.env.PATH = path;
+  }
+  return readFileSync(log, "utf8").split("\n").filter((l) => l.startsWith("pr "));
+}
+
+test("overview asks gh once per project and gives each epic the open PR into its branch", async () => {
+  await fx.planAndPush();
+  await pushEpic("E98", "Second", () => {});
+  const prs = [
+    { number: 5, url: "https://example.com/pull/5", headRefName: "feat/TH-901-first-thing", baseRefName: "epic/E99-test-epic" },
+    { number: 6, url: "https://example.com/pull/6", headRefName: "epic/E98-second", baseRefName: "main" },
+  ];
+  let epics: Array<{ epic: string; openPr: unknown }> = [];
+  const calls = await withFakeGh(JSON.stringify(prs), async () => {
+    epics = (await overview(fx.root, cfg, [])).epics;
+  });
+  expect(calls).toEqual(["pr list --state open --limit 100 --json number,url,headRefName,baseRefName"]);
+  expect(epics.map((e) => [e.epic, e.openPr])).toEqual([
+    ["E98", null],
+    ["E99", { number: 5, url: "https://example.com/pull/5", headRefName: "feat/TH-901-first-thing" }],
+  ]);
+});
+
+test("overview treats any gh failure, bad JSON included, as no open PR", async () => {
+  await fx.planAndPush();
+  let epics: Array<{ epic: string; openPr: unknown }> = [];
+  await withFakeGh("not json", async () => {
+    epics = (await overview(fx.root, cfg, [])).epics;
+  });
+  expect(epics.map((e) => [e.epic, e.openPr])).toEqual([["E99", null]]);
 });

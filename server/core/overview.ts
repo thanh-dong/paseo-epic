@@ -1,9 +1,14 @@
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import type { EpicConfig } from "./config";
-import { ghAvailable, ghOpenPrs, run, runRaw } from "./git";
+import { ghAvailable, ghOpenPrsAnyBase, run, runRaw } from "./git";
 import { epicsDir, loadFromRef } from "./locate";
 import { splitLines, storyOfName } from "./parse";
 import { EpicError } from "./types";
+
+/** At most this many git reads run at once for one project. */
+const GIT_READS_AT_ONCE = 4;
+
+type OpenPr = { number: number; url: string; headRefName: string };
 
 export interface OverviewEpic {
   epic: string;
@@ -16,7 +21,7 @@ export interface OverviewEpic {
   after: string;
   /** Story rows, and those whose status is `planned` or `in_progress`; display only. */
   rows: { total: number; open: number };
-  openPr: { number: number; url: string; headRefName: string } | null;
+  openPr: OpenPr | null;
   workspaceId: string | null;
 }
 
@@ -28,7 +33,8 @@ export interface OverviewResult {
 /**
  * The workspace for an epic: one on the epic branch, else one on a story
  * branch of it (`<branchPrefix><id>-…` for one of its row ids), else the one
- * whose directory is the project root, else none.
+ * whose directory is the project root (paths compared resolved, so a
+ * trailing `/` does not matter), else none.
  */
 export function matchWorkspace(
   branch: string,
@@ -40,7 +46,7 @@ export function matchWorkspace(
   const hit =
     workspaces.find((w) => w.branch === branch) ??
     workspaces.find((w) => w.branch !== null && storyOfName(storyIds, branchPrefix, w.branch) !== undefined) ??
-    workspaces.find((w) => w.directory === projectRoot);
+    workspaces.find((w) => resolve(w.directory) === resolve(projectRoot));
   return hit?.id ?? null;
 }
 
@@ -56,15 +62,41 @@ async function checkoutBranch(dir: string): Promise<string | null> {
   return r.code === 0 ? r.stdout.trim() : null;
 }
 
-/** The open PR into `branch`; null without gh or when gh cannot list PRs for this remote. */
-async function openPrInto(root: string, branch: string): Promise<OverviewEpic["openPr"]> {
-  try {
-    const pr = (await ghOpenPrs(root, branch))[0];
-    return pr ? { number: pr.number, url: pr.url, headRefName: pr.headRefName } : null;
-  } catch (err) {
-    if (err instanceof EpicError) return null;
-    throw err;
+/** The first PR into each base branch. */
+export function prsByBase(prs: ReadonlyArray<OpenPr & { baseRefName: string }>): Map<string, OpenPr> {
+  const out = new Map<string, OpenPr>();
+  for (const { baseRefName, number, url, headRefName } of prs) {
+    if (!out.has(baseRefName)) out.set(baseRefName, { number, url, headRefName });
   }
+  return out;
+}
+
+/**
+ * The project's open PRs by the branch they target, from one gh call. Empty
+ * without gh, and on any gh failure (no auth, not GitHub, output that is not
+ * JSON): a PR link is never worth failing the project for.
+ */
+async function openPrsByBase(root: string): Promise<Map<string, OpenPr>> {
+  try {
+    if (!(await ghAvailable())) return new Map();
+    return prsByBase(await ghOpenPrsAnyBase(root));
+  } catch {
+    return new Map();
+  }
+}
+
+/** `fn` over `items`, at most `limit` at a time; the results keep the item order. */
+async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
 }
 
 /**
@@ -81,8 +113,11 @@ export async function overview(
 ): Promise<OverviewResult> {
   if (opts.fetch) await run(["git", "fetch", "origin", "--prune"], root);
   const branches = await originEpicBranches(root, config);
-  const located = await Promise.all(workspaces.map(async (w) => ({ ...w, branch: await checkoutBranch(w.directory) })));
-  const gh = await ghAvailable();
+  const located = await mapLimit(workspaces, GIT_READS_AT_ONCE, async (w) => ({
+    ...w,
+    branch: await checkoutBranch(w.directory),
+  }));
+  const prs = await openPrsByBase(root);
   const read = async (branch: string): Promise<OverviewEpic | null> => {
     const dir = join(epicsDir(root, config), branch.slice(config.epicBranchPrefix.length));
     let pkg: Awaited<ReturnType<typeof loadFromRef>>;
@@ -106,10 +141,10 @@ export async function overview(
         total: epic.rows.length,
         open: epic.rows.filter((r) => r.status === "planned" || r.status === "in_progress").length,
       },
-      openPr: gh ? await openPrInto(root, branch) : null,
+      openPr: prs.get(branch) ?? null,
       workspaceId: matchWorkspace(branch, ids, config.branchPrefix, root, located),
     };
   };
-  const epics = await Promise.all(branches.map(read));
+  const epics = await mapLimit(branches, GIT_READS_AT_ONCE, read);
   return { project: root, epics: epics.filter((e): e is OverviewEpic => e !== null) };
 }

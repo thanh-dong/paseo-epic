@@ -70,6 +70,17 @@ export async function ghOpenPrs(
   return JSON.parse(out || "[]");
 }
 
+/** Every open PR of the repo with the branch it targets, one call (the overview groups them by base). */
+export async function ghOpenPrsAnyBase(
+  root: string,
+): Promise<Array<{ number: number; url: string; headRefName: string; baseRefName: string }>> {
+  const out = await run(
+    ["gh", "pr", "list", "--state", "open", "--limit", "100", "--json", "number,url,headRefName,baseRefName"],
+    root,
+  );
+  return JSON.parse(out || "[]");
+}
+
 export interface MergedPr {
   number: number;
   url: string;
