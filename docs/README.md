@@ -191,10 +191,13 @@ The full text the tools give the agent is in [routine.md](routine.md).
 - **Composer.** `/epic status` opens the Epic panel.
 
 The client keeps a live workspace list (`workspaces.list` with a
-subscription) and asks the daemon once per workspace directory whether it is
-an epic repo (RPC `epic.header`, which also returns the label). The label is
-read again when Paseo updates that workspace. A workspace that leaves the
-list loses its button.
+subscription, shared by the header buttons and the Epics screen; pages past
+the first 200 workspaces are read once) and asks the daemon per workspace
+directory whether it is an epic repo (RPC `epic.header`, which also returns
+the label). An answer is kept; a failed ask is asked again on the next change
+of that workspace. The label is read again 2 seconds after the last update of
+that workspace, so a burst of updates gives one read. A workspace that leaves
+the list loses its button.
 
 ## The Epic panel
 
@@ -256,7 +259,10 @@ with no next story.
 One section per project, one card per epic, newest epic first. A card shows
 `<epic> <title>`, `<state> · next <story>`, `stories: <open> of <total>
 open` (open means `planned` or `in_progress`), and the open PR into the epic
-branch through `gh`. **Open workspace** and **Open panel** appear when the
+branch. The RPC makes one `gh pr list` call per project and matches each PR
+to its epic by the branch it targets; any `gh` failure means no PR links. At
+most four git reads run at once per project. A project is read again when
+its set of workspaces changes. **Open workspace** and **Open panel** appear when the
 project has a workspace on the epic branch or on one of its story branches,
 else at the project root.
 

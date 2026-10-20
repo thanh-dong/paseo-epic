@@ -65,6 +65,8 @@ through the table.
 | 32 | The Epics screen | one section per project with epic branches; cards newest first with state, next, story counts and the open PR; **Open workspace** and **Open panel** work | pending | |
 | 33 | **Refresh** after pushing a new epic branch from elsewhere, and **Show closed** | Refresh shows the new epic; Show closed adds the `next=none` epics | pending | |
 | 34 | The header button, the Explorer panel and the Epics screen in a compact (narrow) window and in a second theme | text is readable; the screen toolbar buttons stack | pending | |
+| 35 | With several hosts in the app, switch the selected host | the header buttons of the old host go away; the new host's epic workspaces get theirs; the Epics screen lists the new host's projects | pending | |
+| 36 | Open the Epics screen, close it, then create and archive a workspace in an epic repo | the header button appears on the new workspace and goes with the archived one; the app sidebar still updates (closing the screen did not end the shared workspace subscription) | pending | |
 
 ## After the checks pass: move inflow to the plugin
 

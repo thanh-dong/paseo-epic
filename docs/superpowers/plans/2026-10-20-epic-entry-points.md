@@ -122,7 +122,44 @@ work.
     builds the MCP bundle and the bundle did not change.
 11. **Task 8.** No draft PR: this run does not push.
 
-For the live check (task 9): the workspace subscription is
-`workspaces.list({ subscribe: {} })` with no page option, as in the spec. If
-the daemon pages the snapshot, workspaces past the first page would get no
-button; row 26 shows it.
+## Changes after code review (2026-10-21)
+
+All accepted from the review of `feat/epic-entry-points`.
+
+- **A. Paging.** The daemon pages the subscription snapshot at 200. The
+  watcher keeps the snapshot's `pageInfo` and, while `hasMore`, reads the
+  next pages with plain `workspaces.list({ page: { limit: 200, cursor } })`.
+  It adds only ids it does not know yet, so an entry an update already
+  brought keeps its newer data. A new snapshot (reconnect) ends the reads of
+  the old one.
+- **B. Project-root match.** `matchWorkspace` compares `resolve()`d paths,
+  so `/repo/` matches `/repo`.
+- **C. Rate.** A label is read again 2 s after the last update of that
+  workspace (trailing debounce per workspace); `labelSeq` still drops stale
+  reads. Five updates within a second give one read.
+- **D. Errors are not cached.** A failed `epic.header` ask keeps no answer;
+  the next list change of that workspace asks again. Directories are asked
+  only for the workspaces a change is about (all of them on a snapshot).
+  Successful answers, `null` included, are kept.
+- **E. Screen staleness.** The screen reads a project again when its set of
+  workspace ids changes (`workspaceKey`, `groupsToRead`). Before the first
+  workspace list, and while a project has no answer, it shows "Reading the
+  epic branches…", never "No project … has an epic branch".
+- **F. Fan-out.** One `gh pr list --state open --limit 100 --json
+  number,url,headRefName,baseRefName` per project, grouped by `baseRefName`
+  (`prsByBase`). The per-branch git reads and the per-workspace branch reads
+  run at most 4 at a time (a local `mapLimit`). `--limit 100` is added
+  because `gh pr list` lists 30 by default.
+- **G. gh output.** Any gh failure, a JSON parse error included, gives no PR
+  links; it never fails the project.
+- **H. Release.** `subscription.release()` is called as
+  `release().catch(() => {})`.
+- **I. One subscription.** `index.client.tsx` starts one watcher
+  (`watchWorkspaces` now returns `{ listen, stop }`). The header buttons and
+  every open Epics screen listen to it; a listener added after the first
+  snapshot gets the list at once. Its `stop()` is in the contribute cleanup
+  list. The screen therefore reads the workspace list through the client's
+  `paseo`, not `usePaseo()`; rows 35 and 36 check host switches and that
+  closing the screen does not end the subscription.
+
+The paging risk named for the live check is handled by A.
