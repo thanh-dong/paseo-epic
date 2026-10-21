@@ -1,17 +1,20 @@
 import type { PluginServerContext } from "@getpaseo/plugin/server";
 import {
   closeRpc,
+  headerRpc,
   initRpc,
   isEpicRpc,
   nextRpc,
+  overviewRpc,
   startRpc,
   statusRpc,
   storyChangesRpc,
 } from "../../shared/contracts";
-import { cmdClose, cmdInit, cmdNext, cmdStart, cmdStatus } from "../core/commands";
+import { cmdClose, cmdInit, cmdNext, cmdStart, cmdStatus, headerInfo } from "../core/commands";
 import { loadConfig } from "../core/config";
 import { localBranchExists } from "../core/git";
 import { isEpicRepo } from "../core/locate";
+import { overview } from "../core/overview";
 import { EpicError, type SpawnNext } from "../core/types";
 import type { PaseoApi } from "../sdk-types";
 import { createSpawnNext } from "./next";
@@ -78,5 +81,11 @@ export function registerHandlers(
   );
   server.handle(isEpicRpc, ({ workspaceDir }) =>
     refusalsAsErrors(() => ({ epic: isEpicRepo(workspaceDir, loadConfig(workspaceDir)) })),
+  );
+  server.handle(headerRpc, ({ workspaceDir }) =>
+    refusalsAsErrors(() => headerInfo(workspaceDir, loadConfig(workspaceDir))),
+  );
+  server.handle(overviewRpc, ({ projectRoot, workspaces, fetch }) =>
+    refusalsAsErrors(() => overview(projectRoot, loadConfig(projectRoot), workspaces, { fetch })),
   );
 }

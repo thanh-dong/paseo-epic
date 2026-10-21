@@ -4,14 +4,24 @@ import type {
   PluginWorkspaceCommandContext,
 } from "@getpaseo/plugin/client";
 import { initRpc, nextRpc, statusRpc } from "./shared/contracts";
+import { makeEpicOverview } from "./client/EpicOverview";
 import { EpicPanel } from "./client/EpicPanel";
+import { EpicsSidebarItem } from "./client/EpicsSidebarItem";
+import { startHeaderButtons } from "./client/header";
 import { errorText, type PanelResult, postResult } from "./client/results";
-import { closeInstructions, noAgent, startInstructions, USAGE } from "./client/strings";
+import {
+  closeInstructions,
+  noAgent,
+  OVERVIEW_ID,
+  overviewLabels,
+  PANEL_ID,
+  startInstructions,
+  USAGE,
+} from "./client/strings";
+import { watchWorkspaces } from "./client/workspaces";
 
 // Derived from the host SDK: `@getpaseo/client` is not installed on a production-only install.
 type PaseoApi = PluginCommandCapabilities["paseo"];
-
-const PANEL_ID = "epic";
 
 // The hint is the word verb in angle brackets, then [id]. The opening bracket
 // is escaped so the mobile audit's HTML-tag pattern does not match a string.
@@ -97,12 +107,15 @@ async function onEpicCommand(ctx: PluginWorkspaceCommandContext & { args: string
 }
 
 export default function contribute(client: PluginClientContext) {
+  // One workspace list subscription for the header buttons and every open Epics screen.
+  const workspaces = watchWorkspaces(client.paseo.workspaces);
   const cleanups = [
     client.addWorkspacePanel({
       id: PANEL_ID,
       title: "Epic",
       icon: "ListOrdered",
       context: "workspace",
+      locations: ["workspace", "explorer"],
       Component: EpicPanel,
     }),
     client.addSlashCommand({
@@ -122,6 +135,14 @@ export default function contribute(client: PluginClientContext) {
           message: (await ctx.rpc(nextRpc, { workspaceDir: ctx.workspace.directory })).message,
         })),
     }),
+    startHeaderButtons(client, workspaces),
+    client.addScreen({
+      id: OVERVIEW_ID,
+      title: overviewLabels.title,
+      Component: makeEpicOverview((workspaceId) => client.openPanel(PANEL_ID, { workspaceId }), workspaces),
+    }),
+    client.addSidebarFooterItem({ id: OVERVIEW_ID, title: overviewLabels.title, Component: EpicsSidebarItem }),
+    () => workspaces.stop(),
   ];
   return () => {
     for (const cleanup of cleanups) cleanup();

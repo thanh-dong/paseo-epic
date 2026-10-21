@@ -1,8 +1,8 @@
 import type { PluginWorkspacePanelProps } from "@getpaseo/plugin/client";
 import { useMemo } from "react";
 
-// The Epic panel's styles, shared by EpicPanel, StoryRow and FileList. Every
-// color comes from the host theme.
+// The Epic panel's styles, shared by EpicPanel, StoryRow and FileList, and by
+// the Epics screen. Every color comes from the host theme.
 
 /** A story row's chevron (14), gap (8), dot (8) and gap (8); headings, the compact second line and details indent by it. */
 export const MARKER_WIDTH = 38;
@@ -37,6 +37,22 @@ export function useStyles(theme: PluginWorkspacePanelProps["theme"], compact: bo
       buttonText: { color: theme.colors.accentForeground, textAlign: "center" as const },
       result: { gap: 4 },
       link: { color: theme.colors.foreground, textDecorationLine: "underline" as const },
+      section: { gap: compact ? 8 : 10 },
+      card: {
+        gap: 4,
+        padding: compact ? 10 : 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+        backgroundColor: theme.colors.surface1,
+      },
+      toggleOff: {
+        paddingVertical: 8,
+        paddingHorizontal: 14,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: theme.colors.border,
+      },
     }),
     [theme, compact],
   );
