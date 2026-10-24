@@ -26,7 +26,7 @@
     "yaml": "^2.9"
   },
   "devDependencies": {
-    "@getpaseo/plugin": "0.12.0",
+    "@getpaseo/plugin": "0.13.0",
     "@tanstack/react-query": "^5.90.11",
     "@types/node": "^20",
     "@types/react": "~19.2.0",
