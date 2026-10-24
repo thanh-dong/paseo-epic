@@ -300,6 +300,9 @@ result to the closing agent as a message. If the plugin finds a different
 next story than the line names, it does not report the spawn as done; it
 says `Spawn mismatch: ...` and how to start the story by hand. If the turn
 does not end normally (for example, you cancel it), nothing is spawned.
+Paseo 0.13 sends the hook no timeline, so the plugin reads the turn from the
+daemon. Each time the hook does not spawn, it writes the reason to
+`paseo plugin logs epic` (lines start with `[paseo-epic] spawn-on-next:`).
 Press **Start next story** instead.
 
 ```
