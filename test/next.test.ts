@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PluginServerContext } from "@getpaseo/plugin/server";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { cmdInit, type NextResult } from "../server/core/commands";
 import type { EpicConfig } from "../server/core/config";
 import { pendingLine } from "../server/core/text";
@@ -306,9 +306,15 @@ test("pendingNextFromTimeline tolerates odd items", () => {
 });
 
 type TurnEnded = (event: unknown, context: { paseo: PaseoApi }) => Promise<void>;
+type TimelineEntry = { turnId?: string; item: AgentTimelineItem };
+type Refetch = () => Promise<{ entries: TimelineEntry[]; error: string | null }>;
 
-/** A fake server capturing the turn-ended handler, and a paseo recording sends. */
-function hookHarness(spawnNext: SpawnNext) {
+/**
+ * A fake server capturing the turn-ended handler, and a paseo recording sends.
+ * `refetch` answers `agents.ref(id).timeline.refetch` (Paseo 0.13 sends an
+ * empty `event.timeline`, so the hook reads the timeline from the daemon).
+ */
+function hookHarness(spawnNext: SpawnNext, refetch: Refetch = async () => ({ entries: [], error: null })) {
   let handler: TurnEnded | undefined;
   const server = {
     on: (name: string, fn: TurnEnded) => {
@@ -318,8 +324,19 @@ function hookHarness(spawnNext: SpawnNext) {
     },
   } as unknown as PluginServerContext;
   const sent: Array<{ id: string; text: string }> = [];
+  const refetches: Array<{ id: string; options: unknown }> = [];
   const paseo = {
-    agents: { ref: (id: string) => ({ send: async (text: string) => void sent.push({ id, text }) }) },
+    agents: {
+      ref: (id: string) => ({
+        send: async (text: string) => void sent.push({ id, text }),
+        timeline: {
+          refetch: async (options: unknown) => {
+            refetches.push({ id, options });
+            return refetch();
+          },
+        },
+      }),
+    },
   } as unknown as PaseoApi;
   const roots: string[] = [];
   registerSpawnOnNext(server, {
@@ -329,18 +346,153 @@ function hookHarness(spawnNext: SpawnNext) {
       return "/repo";
     },
   });
-  const fire = (outcome: unknown, timeline: AgentTimelineItem[]) =>
+  const fire = (outcome: unknown, timeline: AgentTimelineItem[], turnId: string | null = "t1") =>
     (handler as TurnEnded)(
       {
         agent: { id: "ag_0", workspaceId: "ws_0", parentAgentId: null, provider: "claude", cwd: "/repo/sub", title: null },
-        turnId: "t1",
+        turnId,
         outcome,
         timeline,
       },
       { paseo },
     );
-  return { sent, roots, fire };
+  return { sent, roots, refetches, fire };
 }
+
+/** Every line the hook logged (stdout and stderr) while `run` ran. */
+async function logsOf(run: () => Promise<unknown>): Promise<string[]> {
+  const lines: string[] = [];
+  const record = (...args: unknown[]) => void lines.push(args.map(String).join(" "));
+  const log = vi.spyOn(console, "log").mockImplementation(record);
+  const error = vi.spyOn(console, "error").mockImplementation(record);
+  try {
+    await run();
+  } finally {
+    log.mockRestore();
+    error.mockRestore();
+  }
+  return lines;
+}
+
+/**
+ * The `epic_next` item exactly as Paseo 0.13 returned it from
+ * `timeline.refetch` for agent 4a45733e on 2026-10-24 (turn
+ * `foreground-turn-11`); only the JSON body of the output is shortened.
+ */
+const realEpicNextItem = {
+  type: "tool_call",
+  callId: "toolu_01R42nbV6rGaUufHUudi5WRX",
+  name: "mcp__epic__epic_next",
+  detail: {
+    type: "unknown",
+    input: { story: "TH-E13-11" },
+    output: {
+      output:
+        "Spawn pending for TH-E13-4 after TH-E13-11: the plugin starts the successor now.\n" +
+        '{\n  "epic": "E13",\n  "next": {\n    "story": "TH-E13-4"\n  }\n}\n\n' +
+        "TH-E13-4 Flat audit fields for every policy decision is next. The plugin is starting the successor now; " +
+        "wait for its name, then this session is finished.",
+    },
+  },
+} as unknown as AgentTimelineItem;
+
+/** The real 0.13 turn: the user's `next`, the `epic_next` call, the reply. */
+const realTurn: TimelineEntry[] = [
+  { turnId: "foreground-turn-11", item: { type: "user_message", text: "next" } },
+  { turnId: "foreground-turn-11", item: realEpicNextItem },
+  { turnId: "foreground-turn-11", item: { type: "assistant_message", text: "PR #147 is merged." } },
+];
+
+const realNext = (): NextResult => ({
+  ...nextResult,
+  next: { ...(nextResult.next as NonNullable<NextResult["next"]>), story: "TH-E13-4" },
+});
+
+test("on Paseo 0.13 (empty event timeline) the hook reads the turn from the daemon and spawns", async () => {
+  const seen: Array<{ root: string; story?: string }> = [];
+  const { sent, refetches, fire } = hookHarness(
+    async (input) => {
+      seen.push(input);
+      return { ...realNext(), spawned: null, message: "Started agent X." };
+    },
+    async () => ({ entries: realTurn, error: null }),
+  );
+  await fire({ kind: "completed" }, [], "foreground-turn-11");
+  expect(refetches).toEqual([{ id: "ag_0", options: { direction: "tail", limit: 50 } }]);
+  expect(seen).toEqual([{ root: "/repo", story: "TH-E13-11" }]);
+  expect(sent).toEqual([{ id: "ag_0", text: "Started agent X." }]);
+});
+
+test("on Paseo 0.13 an epic_next call from an earlier turn does not spawn again", async () => {
+  // An autonomous turn has no user message, so only the turn id tells turns apart.
+  let calls = 0;
+  const { sent, fire } = hookHarness(
+    async () => {
+      calls += 1;
+      return { ...realNext(), spawned: null, message: "m" };
+    },
+    async () => ({
+      entries: [...realTurn, { turnId: "autonomous-turn-12", item: { type: "assistant_message", text: "A task finished." } }],
+      error: null,
+    }),
+  );
+  const logs = await logsOf(() => fire({ kind: "completed" }, [], "autonomous-turn-12"));
+  expect(calls).toBe(0);
+  expect(sent).toEqual([]);
+  expect(logs.join("\n")).toMatch(/no epic_next pending line in turn autonomous-turn-12/);
+});
+
+test("when no entry carries the turn id, the hook falls back to the whole fetched window", async () => {
+  let calls = 0;
+  const { sent, fire } = hookHarness(
+    async () => {
+      calls += 1;
+      return { ...realNext(), spawned: null, message: "Started agent X." };
+    },
+    async () => ({ entries: realTurn.map(({ item }) => ({ item })), error: null }),
+  );
+  const logs = await logsOf(() => fire({ kind: "completed" }, [], "foreground-turn-11"));
+  expect(calls).toBe(1);
+  expect(sent).toEqual([{ id: "ag_0", text: "Started agent X." }]);
+  expect(logs.join("\n")).toMatch(/no timeline entry has turn id foreground-turn-11/);
+});
+
+test("a timeline fetch that throws or reports an error is logged, and nothing spawns", async () => {
+  let calls = 0;
+  const spawn: SpawnNext = async () => {
+    calls += 1;
+    return { ...realNext(), spawned: null, message: "m" };
+  };
+  const thrown = hookHarness(spawn, async () => {
+    throw new Error("daemon gone");
+  });
+  const logsThrown = await logsOf(() => expect(thrown.fire({ kind: "completed" }, [])).resolves.toBeUndefined());
+  const failed = hookHarness(spawn, async () => ({ entries: [], error: "agent not found" }));
+  const logsFailed = await logsOf(() => failed.fire({ kind: "completed" }, []));
+  expect(calls).toBe(0);
+  expect([...thrown.sent, ...failed.sent]).toEqual([]);
+  expect(logsThrown.join("\n")).toMatch(/could not read the timeline of ag_0: daemon gone/);
+  expect(logsFailed.join("\n")).toMatch(/could not read the timeline of ag_0: agent not found/);
+});
+
+test("on Paseo 0.12 (timeline in the event) the hook does not fetch the timeline", async () => {
+  const { refetches, fire } = hookHarness(async () => ({ ...nextResult, spawned: null, message: "m" }));
+  await fire({ kind: "completed" }, pendingTimeline);
+  expect(refetches).toEqual([]);
+});
+
+test("every early return of the turn-ended hook is logged", async () => {
+  const { fire } = hookHarness(async () => ({ ...nextResult, spawned: null, message: "Started agent X." }));
+  const canceled = await logsOf(() => fire({ kind: "canceled", reason: "user" }, pendingTimeline));
+  expect(canceled.join("\n")).toMatch(/turn t1 of ag_0 ended canceled, not completed/);
+  const none = await logsOf(() => fire({ kind: "completed" }, [{ type: "user_message", text: "hi" }]));
+  expect(none.join("\n")).toMatch(/no epic_next pending line in turn t1 of ag_0/);
+  const first = await logsOf(() => fire({ kind: "completed" }, pendingTimeline));
+  expect(first.join("\n")).toMatch(/spawning TH-902 after TH-901 for ag_0/);
+  expect(first.join("\n")).toMatch(/Started agent X\./);
+  const again = await logsOf(() => fire({ kind: "completed" }, pendingTimeline));
+  expect(again.join("\n")).toMatch(/already handled/);
+});
 
 const pendingTimeline: AgentTimelineItem[] = [
   { type: "user_message", text: "next" },
