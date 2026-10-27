@@ -44500,8 +44500,8 @@ async function cmdStatus(root2, config2, ref) {
 }
 
 // server/core/text.ts
-function pendingLine(next, closed) {
-  return `Spawn pending for ${next} after ${closed}: the plugin starts the successor now.`;
+function pendingLine(next, closed, provider) {
+  return `Spawn pending for ${next} after ${closed}${provider ? ` in ${provider}` : ""}: the plugin starts the successor now.`;
 }
 function paragraph(parts) {
   return parts.filter((p) => p.length > 0).join(" ");
@@ -44658,12 +44658,16 @@ server.registerTool(
 server.registerTool(
   "epic_next",
   {
-    description: "Call when the user replies `next` after the story PR merged: it confirms the merge and names the next story.",
-    inputSchema: story
+    description: "Call when the user replies `next` after the story PR merged: it confirms the merge and names the next story. Set `provider` only when the user names a Paseo provider id (`next in claude-team` -> `claude-team`); without it the next story runs on this agent's provider.",
+    inputSchema: {
+      ...story,
+      // One token: it is printed into the pending line, which the hook parses on whitespace.
+      provider: external_exports.string().regex(/^[A-Za-z0-9._-]+$/).optional()
+    }
   },
-  ({ story: id }) => answer(async () => {
+  ({ story: id, provider }) => answer(async () => {
     const result = await cmdNext(root, loadConfig(root), id, {});
-    const first = result.next === null ? void 0 : pendingLine(result.next.story, result.closed.story);
+    const first = result.next === null ? void 0 : pendingLine(result.next.story, result.closed.story, provider);
     return { first, result, next: afterNext(result, "pending") };
   })
 );

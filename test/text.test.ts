@@ -149,6 +149,12 @@ test("parsePendingLine reads ids of any shape", () => {
   expect(parsePendingLine(pendingLine("TH-E10-2", "TH-E10-1"))).toEqual({ next: "TH-E10-2", closed: "TH-E10-1" });
 });
 
+test("pendingLine carries a named provider and parsePendingLine reads it back", () => {
+  const line = pendingLine("TH-667", "TH-666", "claude-team");
+  expect(line).toBe("Spawn pending for TH-667 after TH-666 in claude-team: the plugin starts the successor now.");
+  expect(parsePendingLine(line)).toEqual({ next: "TH-667", closed: "TH-666", provider: "claude-team" });
+});
+
 test("parsePendingLine matches a whole line only", () => {
   const line = pendingLine("TH-667", "TH-666");
   expect(parsePendingLine(`  "body": "${line}"`)).toBeNull();

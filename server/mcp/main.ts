@@ -107,14 +107,20 @@ server.registerTool(
   "epic_next",
   {
     description:
-      "Call when the user replies `next` after the story PR merged: it confirms the merge and names the next story.",
-    inputSchema: story,
+      "Call when the user replies `next` after the story PR merged: it confirms the merge and names the next story. " +
+      "Set `provider` only when the user names a Paseo provider id (`next in claude-team` -> `claude-team`); " +
+      "without it the next story runs on this agent's provider.",
+    inputSchema: {
+      ...story,
+      // One token: it is printed into the pending line, which the hook parses on whitespace.
+      provider: z.string().regex(/^[A-Za-z0-9._-]+$/).optional(),
+    },
   },
-  ({ story: id }) =>
+  ({ story: id, provider }) =>
     answer(async () => {
       const result = await cmdNext(root, loadConfig(root), id, {});
       // The pending line comes first, on its own line: the turn-ended hook reads it there.
-      const first = result.next === null ? undefined : pendingLine(result.next.story, result.closed.story);
+      const first = result.next === null ? undefined : pendingLine(result.next.story, result.closed.story, provider);
       return { first, result, next: afterNext(result, "pending") };
     }),
 );

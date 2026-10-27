@@ -344,9 +344,14 @@ The shipped templates are neutral. Ship your own with `templates:` in
   `<tmpdir>/paseo-epic/epic-mcp-<hash>.mjs` and reused when a file with that
   name and size already exists. This path will be hardened before the npm
   package is published (the package is not on npm yet).
-- **Profile fallback.** Without `profile` in `.epic.yml`, the successor uses
-  the first launch profile whose notes mention "story" or "epic", else a
-  `claude` agent on the provider's default model. Set `profile` to be explicit.
+- **Provider and profile.** After `next`, the successor runs on the provider
+  the user named (`next in claude-team`), else on the provider of the agent
+  that ran `next`. The plugin takes the launch profile on that provider: the
+  one `profile` in `.epic.yml` names (one profile with the same name per
+  provider is fine), else one whose notes mention "story" or "epic". With no
+  profile on that provider, the agent uses the provider's default model.
+  The **Start next story** button has no agent behind it, so it uses the
+  first matching profile, else `claude`.
 - **Cancelled turns.** If the closing agent's turn does not end normally,
   nothing is spawned. Press **Start next story** instead.
 - **Manual checks.** Some live checks are still pending (panel layouts, the

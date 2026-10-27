@@ -419,7 +419,7 @@ test("on Paseo 0.13 (empty event timeline) the hook reads the turn from the daem
   );
   await fire({ kind: "completed" }, [], "foreground-turn-11");
   expect(refetches).toEqual([{ id: "ag_0", options: { direction: "tail", limit: 50 } }]);
-  expect(seen).toEqual([{ root: "/repo", story: "TH-E13-11" }]);
+  expect(seen).toEqual([{ root: "/repo", story: "TH-E13-11", provider: "claude" }]);
   expect(sent).toEqual([{ id: "ag_0", text: "Started agent X." }]);
 });
 
@@ -508,8 +508,21 @@ test("the turn-ended hook spawns once and sends the result to the agent", async 
   await fire({ kind: "completed" }, pendingTimeline);
   await fire({ kind: "completed" }, pendingTimeline);
   expect(roots).toEqual(["/repo/sub"]);
-  expect(seen).toEqual([{ root: "/repo", story: "TH-901" }]);
+  expect(seen).toEqual([{ root: "/repo", story: "TH-901", provider: "claude" }]);
   expect(sent).toEqual([{ id: "ag_0", text: "Started agent X." }]);
+});
+
+test("the turn-ended hook spawns on the provider the user named over the session's own", async () => {
+  const seen: Array<{ provider?: string }> = [];
+  const { fire } = hookHarness(async (input) => {
+    seen.push(input);
+    return { ...nextResult, spawned: null, message: "ok" };
+  });
+  await fire({ kind: "completed" }, [
+    { type: "user_message", text: "next in claude-team" },
+    toolCall("mcp__epic__epic_next", pendingText.replace(pendingLine("TH-902", "TH-901"), pendingLine("TH-902", "TH-901", "claude-team"))),
+  ]);
+  expect(seen.map((s) => s.provider)).toEqual(["claude-team"]);
 });
 
 test("the turn-ended hook reports a mismatch instead of claiming success", async () => {
@@ -640,6 +653,30 @@ test("lastClosedStory reads the handoff's after= and refuses none or a missing h
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+const perProvider: Profile[] = [
+  { id: "s1", name: "story", provider: "claude", model: "opus", notes: "story" },
+  { id: "s2", name: "story", provider: "claude-team", model: "opus", modeId: "auto", notes: "story" },
+  { id: "s3", name: "story", provider: "claude-ttales", model: "opus", notes: "story" },
+];
+
+test("with a provider, picks the same-named profile on that provider", async () => {
+  const { paseo, calls } = fakePaseo(perProvider);
+  await spawner(paseo, { config: { ...baseConfig, profile: "story" } })({ root: "/repo", story: "TH-901", provider: "claude-team" });
+  expect(calls.agents[0].config).toEqual({ provider: "claude-team/opus", modeId: "auto" });
+});
+
+test("with a provider, picks the notes profile on that provider", async () => {
+  const { paseo, calls } = fakePaseo(perProvider);
+  await spawner(paseo)({ root: "/repo", story: "TH-901", provider: "claude-ttales" });
+  expect(calls.agents[0].config).toEqual({ provider: "claude-ttales/opus" });
+});
+
+test("with a provider no profile is on, runs that provider on its default model", async () => {
+  const { paseo, calls } = fakePaseo(perProvider);
+  await spawner(paseo)({ root: "/repo", story: "TH-901", provider: "codex" });
+  expect(calls.agents[0].config).toEqual({ provider: "codex/codex-default" });
 });
 
 test("a provider that lists no model refuses the spawn with the fix", async () => {

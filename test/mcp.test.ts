@@ -72,11 +72,11 @@ test("epic_next prints the pending line first, then the JSON and what to do", as
       }),
     );
     try {
-      const out = (await client.callTool({ name: "epic_next", arguments: { story: "TH-901" } })) as TextResult;
+      const out = (await client.callTool({ name: "epic_next", arguments: { story: "TH-901", provider: "claude-team" } })) as TextResult;
       expect(out.isError).toBeFalsy();
       const text = out.content[0].text;
       const [first, ...rest] = text.split("\n");
-      expect(first).toBe(pendingLine("TH-902", "TH-901"));
+      expect(first).toBe(pendingLine("TH-902", "TH-901", "claude-team"));
       const [json, next] = rest.join("\n").split("\n\n");
       expect(JSON.parse(json).next.story).toBe("TH-902");
       expect(next).toContain("The plugin is starting the successor now");
