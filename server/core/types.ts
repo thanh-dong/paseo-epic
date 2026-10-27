@@ -54,4 +54,6 @@ export type SpawnNext = (input: {
   story?: string;
   /** Epic or story id naming the package whose last closed story `next` runs for, when `story` is absent. */
   ref?: string;
+  /** Paseo provider id the successor runs on; picks that provider's launch profile. */
+  provider?: string;
 }) => Promise<NextResult & { spawned: Spawned | null; message: string }>;

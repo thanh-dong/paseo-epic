@@ -1,19 +1,22 @@
 import type { NextResult } from "./commands";
 
-const PENDING_LINE_RE = /^Spawn pending for (\S+) after (\S+): the plugin starts the successor now\.$/;
+// The ` in <provider>` part is optional: an agent started before it existed runs an MCP bundle that omits it.
+const PENDING_LINE_RE = /^Spawn pending for (\S+) after (\S+)(?: in (\S+))?: the plugin starts the successor now\.$/;
 
 /**
  * The line `epic_next` prints first when a next story exists. The turn-ended
- * hook reads it back to know which story to spawn after which closed one.
+ * hook reads it back to know which story to spawn after which closed one, and
+ * on which provider when the user named one.
  */
-export function pendingLine(next: string, closed: string): string {
-  return `Spawn pending for ${next} after ${closed}: the plugin starts the successor now.`;
+export function pendingLine(next: string, closed: string, provider?: string): string {
+  return `Spawn pending for ${next} after ${closed}${provider ? ` in ${provider}` : ""}: the plugin starts the successor now.`;
 }
 
-/** The two story ids of a whole pending line, or null for any other line. */
-export function parsePendingLine(text: string): { next: string; closed: string } | null {
+/** The story ids (and the named provider) of a whole pending line, or null for any other line. */
+export function parsePendingLine(text: string): { next: string; closed: string; provider?: string } | null {
   const match = PENDING_LINE_RE.exec(text.trim());
-  return match ? { next: match[1], closed: match[2] } : null;
+  if (!match) return null;
+  return match[3] ? { next: match[1], closed: match[2], provider: match[3] } : { next: match[1], closed: match[2] };
 }
 
 /** Sentences joined into one paragraph; empty parts are dropped. */

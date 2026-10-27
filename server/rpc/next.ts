@@ -33,12 +33,19 @@ export async function lastClosedStory(root: string, config: EpicConfig, ref?: st
 }
 
 /**
- * The launch profile (spec section 8): the one `.epic.yml` names by id or
- * name, else the first whose notes mention a story or an epic, else none.
+ * The launch profile (spec section 8): the ones `.epic.yml` names by id or
+ * name, else the ones whose notes mention a story or an epic. With a provider,
+ * the first of those on that provider (one same-named profile per provider),
+ * else none; without one, the first.
  */
-function pickProfile(profiles: AgentProfile[], named: string | undefined): AgentProfile | undefined {
-  const byName = named ? profiles.find((p) => p.id === named || p.name === named) : undefined;
-  return byName ?? profiles.find((p) => /story|epic/i.test(p.notes ?? ""));
+function pickProfile(
+  profiles: AgentProfile[],
+  named: string | undefined,
+  provider: string | undefined,
+): AgentProfile | undefined {
+  const byName = named ? profiles.filter((p) => p.id === named || p.name === named) : [];
+  const candidates = byName.length > 0 ? byName : profiles.filter((p) => /story|epic/i.test(p.notes ?? ""));
+  return provider ? candidates.find((p) => p.provider === provider) : candidates[0];
 }
 
 /** The provider the spawn uses when no profile names one. */
@@ -63,11 +70,12 @@ async function defaultModelFor(paseo: PaseoApi, provider: string): Promise<strin
 }
 
 /**
- * The profile materialized into an agent config. With no profile, `claude` on
- * its default model; a profile with no model gets its provider's default too.
+ * The profile materialized into an agent config. With no profile, the asked
+ * provider (else `claude`) on its default model; a profile with no model gets
+ * its provider's default too.
  */
-async function agentConfig(paseo: PaseoApi, profile: AgentProfile | undefined) {
-  const provider = profile?.provider ?? DEFAULT_PROVIDER;
+async function agentConfig(paseo: PaseoApi, profile: AgentProfile | undefined, asked: string | undefined) {
+  const provider = profile?.provider ?? asked ?? DEFAULT_PROVIDER;
   const model = profile?.model ?? (await defaultModelFor(paseo, provider));
   const config: {
     provider: string;
@@ -93,7 +101,7 @@ export function createSpawnNext(deps: {
   findWorkspaceByBranch: (branch: string) => Promise<{ id: string; directory: string } | null>;
   localBranchExists: typeof localBranchExists;
 }): SpawnNext {
-  return async ({ root, story, ref }) => {
+  return async ({ root, story, ref, provider }) => {
     const cfg = deps.config(root);
     const result = await deps.next(root, cfg, story ?? (await lastClosedStory(root, cfg, ref)));
     const next = result.next;
@@ -120,7 +128,7 @@ export function createSpawnNext(deps: {
     const reuse = await deps.localBranchExists(root, next.branch);
     const branchNote = reuse ? `The worktree reused the existing local branch ${next.branch}.` : "";
     const profiles = (await deps.paseo.config.get()).config.agentProfiles ?? [];
-    const config = await agentConfig(deps.paseo, pickProfile(profiles, cfg.profile));
+    const config = await agentConfig(deps.paseo, pickProfile(profiles, cfg.profile, provider), provider);
 
     let workspace: Awaited<ReturnType<PaseoApi["workspaces"]["create"]>>;
     try {

@@ -39,7 +39,7 @@ function outputTexts(detail: unknown): string[] {
  */
 export function pendingNextFromTimeline(
   timeline: readonly AgentTimelineItem[],
-): { next: string; closed: string; callId: string | null } | null {
+): { next: string; closed: string; provider?: string; callId: string | null } | null {
   let start = 0;
   for (let i = timeline.length - 1; i >= 0; i--) {
     if (timeline[i]?.type === "user_message") {
@@ -131,7 +131,12 @@ export function registerSpawnOnNext(
 
     let text: string;
     try {
-      const out = await deps.spawnNextFor(paseo)({ root: deps.repoRoot(event.agent.cwd), story: pending.closed });
+      // The provider the user named, else the one this session runs on.
+      const out = await deps.spawnNextFor(paseo)({
+        root: deps.repoRoot(event.agent.cwd),
+        story: pending.closed,
+        provider: pending.provider ?? event.agent.provider,
+      });
       const found = out.next?.story ?? "none";
       text =
         found === pending.next
